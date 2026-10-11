@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import request from 'supertest';
+import jwt from 'jsonwebtoken';
+import { app } from '../server.js';
+import env from '../config/env.js';
 import { db } from '../config/db.js';
 import { users, groups, people } from '../models/index.js';
 import {
@@ -104,5 +108,42 @@ describe('groupService: Host person atomicity, constraints & settle lifecycle', 
 
     expect(reopened.status).toBe('active');
     await expect(ensureGroupNotSettled(group.id)).resolves.toBeDefined();
+  });
+
+  it('allows the host to edit group name and description via PATCH /api/groups/:groupId', async () => {
+    const rand = Math.floor(Math.random() * 100000);
+    const [host] = await db
+      .insert(users)
+      .values({
+        name: 'Edit Host',
+        username: `ed_${rand}`,
+        email: `ed_${rand}@splitorbit.test`,
+        passwordHash: 'hash',
+      })
+      .returning();
+
+    const { group } = await createGroupWithHost({
+      name: 'Original Trip Name',
+      description: 'Original description',
+      user: host,
+    });
+
+    const token = jwt.sign(
+      { userId: host.id, username: host.username, role: host.role, tokenVersion: host.tokenVersion },
+      env.JWT_SECRET
+    );
+
+    const res = await request(app)
+      .patch(`/api/groups/${group.id}`)
+      .set('Cookie', [`splitorbit_token=${token}`])
+      .send({
+        name: 'Updated Goa Trip 2026',
+        description: 'New itinerary and notes',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.name).toBe('Updated Goa Trip 2026');
+    expect(res.body.data.description).toBe('New itinerary and notes');
   });
 });

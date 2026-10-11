@@ -12,6 +12,7 @@ import Modal from '../components/common/Modal.jsx';
 import AddPersonModal from '../components/forms/AddPersonModal.jsx';
 import AddExpenseModal from '../components/forms/AddExpenseModal.jsx';
 import AddPaymentModal from '../components/forms/AddPaymentModal.jsx';
+import EditGroupModal from '../components/forms/EditGroupModal.jsx';
 import PersonCopyDropdown from '../components/common/PersonCopyDropdown.jsx';
 import PersonName from '../components/common/PersonName.jsx';
 import api from '../api/client.js';
@@ -41,6 +42,8 @@ import {
   UserCheck,
   Link2,
   Eye,
+  Pencil,
+  Calendar,
 } from 'lucide-react';
 import { m } from 'motion/react';
 import { springs } from '../motion/tokens.js';
@@ -77,6 +80,7 @@ export default function GroupDetailPage() {
   const [isPersonModalOpen, setIsPersonModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
   const [paymentModalDefaults, setPaymentModalDefaults] = useState({
     fromPersonId: null,
     toPersonId: null,
@@ -451,6 +455,17 @@ ${balanceLine}`);
               <h1 className="text-2xl sm:text-3xl font-extrabold text-text tracking-tight">
                 {group.name}
               </h1>
+              {isHost && group.status === 'active' && !group.isFrozen && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditGroupModalOpen(true)}
+                  className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-raised transition border border-transparent hover:border-border cursor-pointer"
+                  title="Edit group details"
+                  aria-label="Edit group details"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
               <Badge
                 variant={group.status === 'active' ? 'active' : 'settled'}
                 size="sm"
@@ -464,6 +479,12 @@ ${balanceLine}`);
                 </Badge>
               )}
             </div>
+            {group.date && (
+              <div className="flex items-center gap-1.5 text-xs text-text-muted font-medium">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{formatDate(group.date)}</span>
+              </div>
+            )}
             {group.description && (
               <p className="text-xs text-text-muted max-w-2xl">{group.description}</p>
             )}
@@ -493,6 +514,14 @@ ${balanceLine}`);
                       iconLeft={<Users className="w-3.5 h-3.5 text-text-muted" />}
                     >
                       Add Person
+                    </Button>
+                    <Button
+                      onClick={() => setIsEditGroupModalOpen(true)}
+                      variant="secondary"
+                      size="sm"
+                      iconLeft={<Pencil className="w-3.5 h-3.5 text-text-muted" />}
+                    >
+                      Edit Group
                     </Button>
                   </>
                 )}
@@ -1139,6 +1168,18 @@ ${balanceLine}`);
       )}
 
       {/* Modals & Dialogs */}
+      {isHost && group && (
+        <EditGroupModal
+          isOpen={isEditGroupModalOpen}
+          onClose={() => setIsEditGroupModalOpen(false)}
+          group={group}
+          onGroupUpdated={(updatedGroup) => {
+            setGroup((prev) => ({ ...prev, ...updatedGroup }));
+            fetchData();
+          }}
+        />
+      )}
+
       <AddPersonModal
         isOpen={isPersonModalOpen}
         onClose={() => setIsPersonModalOpen(false)}
