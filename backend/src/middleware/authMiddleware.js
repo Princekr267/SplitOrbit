@@ -75,6 +75,7 @@ export async function authenticate(req, res, next) {
         phone: users.phone,
         role: users.role,
         isActive: users.isActive,
+        deactivatedReason: users.deactivatedReason,
         tokenVersion: users.tokenVersion,
         passwordChangeNoticePending: users.passwordChangeNoticePending,
         passwordChangeMethod: users.passwordChangeMethod,
@@ -83,12 +84,25 @@ export async function authenticate(req, res, next) {
       .from(users)
       .where(eq(users.id, userId));
 
-    if (!user || !user.isActive) {
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User no longer exists. Please log in again.',
+        },
+      });
+    }
+
+    if (!user.isActive) {
       return res.status(401).json({
         success: false,
         error: {
           code: 'ACCOUNT_DISABLED',
-          message: 'This account has been disabled or no longer exists.',
+          message: 'This account has been deactivated.',
+          details: {
+            reason: user.deactivatedReason || 'Administrative decision',
+          },
         },
       });
     }

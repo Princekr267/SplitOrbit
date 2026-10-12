@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import api, { onUnauthorized } from '../api/client.js';
+import api, { onUnauthorized, setStoredToken, clearStoredToken } from '../api/client.js';
 
 const AuthContext = createContext(null);
 
@@ -105,6 +105,14 @@ export function AuthProvider({ children }) {
     });
 
     if (res.success) {
+      if (res.data?.token) {
+        setStoredToken(res.data.token);
+      }
+      if (res.data?.user) {
+        setUser(res.data.user);
+        setStatus('authenticated');
+        setError(null);
+      }
       // Re-fetch /me to establish fully hydrated session state
       const refreshedUser = await bootstrapAuth();
       return refreshedUser || res.data?.user;
@@ -124,7 +132,15 @@ export function AuthProvider({ children }) {
     });
 
     if (res.success) {
-      // Re-fetch /me to establish authenticated session state
+      if (res.data?.token) {
+        setStoredToken(res.data.token);
+      }
+      if (res.data?.user) {
+        setUser(res.data.user);
+        setStatus('authenticated');
+        setError(null);
+      }
+      // Re-fetch /me to establish authenticated session state in background
       await bootstrapAuth();
       return {
         user: res.data?.user,
@@ -150,11 +166,7 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.warn('Logout request failed; continuing local cleanup:', err);
     } finally {
-      // Clear legacy storage tokens if any existed
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('splitorbit_token');
-        localStorage.removeItem('splittrack_token');
-      }
+      clearStoredToken();
       setUser(null);
       setStatus('unauthenticated');
       setError(null);

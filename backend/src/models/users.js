@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, integer, pgEnum, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, timestamp, integer, pgEnum, uniqueIndex, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const userRoleEnum = pgEnum('user_role', ['user', 'admin']);
@@ -24,6 +24,7 @@ export const users = pgTable(
     showUpi: boolean('show_upi').default(false).notNull(),
     defaultPaymentMode: varchar('default_payment_mode', { length: 20 }).default('online').notNull(),
     defaultSplitType: varchar('default_split_type', { length: 20 }).default('equal').notNull(),
+    deactivatedReason: text('deactivated_reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()

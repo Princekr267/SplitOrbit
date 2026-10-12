@@ -237,6 +237,7 @@ export async function getUsers(req, res, next) {
         phone: users.phone,
         role: users.role,
         isActive: users.isActive,
+        deactivatedReason: users.deactivatedReason,
         lastLoginAt: users.lastLoginAt,
         passwordChangedAt: users.passwordChangedAt,
         createdAt: users.createdAt,
@@ -407,6 +408,7 @@ export async function toggleUserStatus(req, res, next) {
       // Update isActive. If disabling, also increment tokenVersion to immediately revoke sessions
       const updateData = {
         isActive: Boolean(isActive),
+        deactivatedReason: isActive ? null : reason.trim(),
       };
       if (!isActive) {
         updateData.tokenVersion = sql`${users.tokenVersion} + 1`;
@@ -423,6 +425,7 @@ export async function toggleUserStatus(req, res, next) {
           email: users.email,
           role: users.role,
           isActive: users.isActive,
+          deactivatedReason: users.deactivatedReason,
         });
 
       await recordAuditLog(

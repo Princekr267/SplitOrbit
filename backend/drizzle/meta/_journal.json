@@ -43,6 +43,13 @@
       "when": 1791465410914,
       "tag": "0005_phase4_oversight_and_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791465410915,
+      "tag": "0006_add_deactivated_reason",
+      "breakpoints": true
     }
   ]
 }

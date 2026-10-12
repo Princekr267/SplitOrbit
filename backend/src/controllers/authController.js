@@ -365,8 +365,8 @@ export async function login(req, res, next) {
       .from(users)
       .where(eq(users.username, cleanUsername));
 
-    // Constant-time dummy compare if user does not exist or account is disabled
-    if (!user || !user.isActive) {
+    // Constant-time dummy compare if user does not exist
+    if (!user) {
       await bcrypt.compare(
         password,
         '$2b$10$wE99qF4JqF979.9999999.u99999999999999999999999999999'
@@ -387,6 +387,19 @@ export async function login(req, res, next) {
         error: {
           code: 'INVALID_CREDENTIALS',
           message: 'Incorrect username or password.',
+        },
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ACCOUNT_DISABLED',
+          message: 'This account has been deactivated.',
+          details: {
+            reason: user.deactivatedReason || 'Administrative decision',
+          },
         },
       });
     }

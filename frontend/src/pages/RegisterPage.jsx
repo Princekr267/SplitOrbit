@@ -75,7 +75,13 @@ export default function RegisterPage() {
   const [searchParams] = useSearchParams();
   const rawNext = searchParams.get('next') || searchParams.get('returnUrl');
   const validNext = isValidNextUrl(rawNext) ? rawNext : '/dashboard';
-  const initialInvite = searchParams.get('invite') || searchParams.get('code') || '';
+  let initialInvite = searchParams.get('invite') || searchParams.get('code') || '';
+  if (!initialInvite && rawNext && rawNext.includes('/invite/')) {
+    const match = rawNext.match(/\/invite\/([^/?#]+)/i);
+    if (match && match[1]) {
+      initialInvite = match[1];
+    }
+  }
 
   const [allowRegistration, setAllowRegistration] = useState(true);
   const [inviteCode, setInviteCode] = useState(initialInvite);

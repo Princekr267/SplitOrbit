@@ -84,6 +84,19 @@ export default function UserDetailDrawer({ userId, isOpen, onClose }) {
             </div>
           </div>
 
+          {/* Account Deactivated Banner with Reason */}
+          {!data.user.isActive && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-rose-800 dark:text-rose-200">
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                <span>Account Deactivated</span>
+              </div>
+              <p className="text-[11px] text-text">
+                Admin Reason: <span className="italic font-medium">&ldquo;{data.user.deactivatedReason || 'No reason specified'}&rdquo;</span>
+              </p>
+            </div>
+          )}
+
           {/* Account Attributes Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3 rounded-xl bg-surface border border-border space-y-1">

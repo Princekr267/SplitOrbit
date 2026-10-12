@@ -19,13 +19,40 @@ export const api = axios.create({
 });
 
 /**
+ * Token management for resilient dual-layer authentication (HTTP-only cookies + Bearer token fallback).
+ */
+export function getStoredToken() {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('splitorbit_token') || localStorage.getItem('splittrack_token');
+  }
+  return null;
+}
+
+export function setStoredToken(token) {
+  if (typeof window !== 'undefined') {
+    if (token) {
+      localStorage.setItem('splitorbit_token', token);
+    } else {
+      localStorage.removeItem('splitorbit_token');
+      localStorage.removeItem('splittrack_token');
+    }
+  }
+}
+
+export function clearStoredToken() {
+  setStoredToken(null);
+}
+
+/**
  * Cold-start detector:
- * If an in-flight API request takes > 4s (backend cold start),
+ * If an initial API request takes > 6s (backend sleeping),
  * notifies listeners so the UI can show "Waking up the server…".
+ * Automatically suppressed once the server has responded.
  */
 let activeRequests = 0;
 let serverWakingTimer = null;
 let serverIsWaking = false;
+let serverHasResponded = false;
 const serverWakingListeners = new Set();
 
 function updateServerWaking(isWaking) {
@@ -48,7 +75,6 @@ function updateServerWaking(isWaking) {
 
 export function onServerWakingChange(callback) {
   serverWakingListeners.add(callback);
-  // Initial callback with current state
   try {
     callback(serverIsWaking);
   } catch {}
@@ -60,20 +86,28 @@ export function isServerWaking() {
 }
 
 api.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
   activeRequests++;
-  if (activeRequests === 1 && !serverWakingTimer) {
+  if (!serverHasResponded && activeRequests === 1 && !serverWakingTimer) {
     serverWakingTimer = setTimeout(() => {
-      if (activeRequests > 0) {
+      if (activeRequests > 0 && !serverHasResponded) {
         updateServerWaking(true);
       }
-    }, 4000);
+    }, 6000);
   }
   return config;
 });
 
-function handleRequestFinished() {
+function handleRequestFinished(hasResponse = false) {
+  if (hasResponse) {
+    serverHasResponded = true;
+  }
   activeRequests = Math.max(0, activeRequests - 1);
-  if (activeRequests === 0) {
+  if (activeRequests === 0 || serverHasResponded) {
     if (serverWakingTimer) {
       clearTimeout(serverWakingTimer);
       serverWakingTimer = null;
@@ -106,7 +140,7 @@ export function notifyUnauthorized() {
 
 /**
  * Checks if a requested URL represents a protected endpoint (requires auth).
- * Public routes (share links, invite preview, auth endpoints, health, public settings) are exempt from 401 redirect loops.
+ * Public routes (share links, invite preview, auth endpoints, health, public settings, session probe) are exempt from 401 redirect loops.
  */
 export function isProtectedEndpoint(url) {
   if (!url) return false;
@@ -148,7 +182,7 @@ export function isProtectedEndpoint(url) {
 
 api.interceptors.response.use(
   (response) => {
-    handleRequestFinished();
+    handleRequestFinished(true);
     return response.data;
   },
   async (error) => {
@@ -174,7 +208,7 @@ api.interceptors.response.use(
       return api(config);
     }
 
-    handleRequestFinished();
+    handleRequestFinished(Boolean(error.response));
 
     const message =
       error.response?.data?.error?.message ||
@@ -190,6 +224,7 @@ api.interceptors.response.use(
 
     // Handle 401 Unauthorized from protected endpoints
     if (status === 401) {
+      clearStoredToken();
       const requestedUrl = error.config?.url;
       const isProtected = isProtectedEndpoint(requestedUrl);
 
@@ -198,9 +233,13 @@ api.interceptors.response.use(
 
         if (typeof window !== 'undefined' && !isRedirecting401) {
           const currentPath = window.location.pathname + window.location.search;
-          const isOnLoginPage = window.location.pathname === '/login';
+          const currentPathname = window.location.pathname;
+          const isExemptPage =
+            ['/login', '/register', '/forgot-password', '/reset-password', '/'].includes(currentPathname) ||
+            currentPathname.startsWith('/s/') ||
+            currentPathname.startsWith('/invite/');
 
-          if (!isOnLoginPage) {
+          if (!isExemptPage) {
             isRedirecting401 = true;
             clearTimeout(redirectDebounceTimer);
 

@@ -73,7 +73,8 @@ export async function ensureGroupNotSettled(groupId, tx = db) {
   }
 
   if (group.isFrozen) {
-    throw new GroupOperationError('This group is frozen by an admin', 409);
+    const reasonText = group.frozenReason ? `: "${group.frozenReason}"` : '';
+    throw new GroupOperationError(`This group is frozen by an admin${reasonText}`, 409);
   }
 
   if (group.status === 'settled') {

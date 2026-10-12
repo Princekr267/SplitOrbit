@@ -27,9 +27,12 @@ export default function LoginPage() {
   const { addToast } = useToast();
   const navigate = useNavigate();
 
+  const [disabledDetails, setDisabledDetails] = useState(null);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
+    setDisabledDetails(null);
     const cleanUsername = username.trim().toLowerCase();
     if (!cleanUsername || !password) return;
 
@@ -40,9 +43,17 @@ export default function LoginPage() {
       const destination = validNext || (user?.role === 'admin' ? '/admin' : '/dashboard');
       navigate(destination, { replace: true });
     } catch (err) {
-      const msg = err.message || 'Invalid username or password';
-      setErrorMessage(msg);
-      addToast(msg, 'error');
+      if (err.code === 'ACCOUNT_DISABLED') {
+        const reason = err.details?.reason || 'Administrative action';
+        setDisabledDetails({ reason });
+        setErrorMessage('This account has been deactivated by an administrator.');
+        addToast('This account has been deactivated.', 'error');
+      } else {
+        setDisabledDetails(null);
+        const msg = err.message || 'Invalid username or password';
+        setErrorMessage(msg);
+        addToast(msg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -81,7 +92,29 @@ export default function LoginPage() {
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
         <Card className="space-y-5 animate-scale-in">
           <AnimatePresence>
-            {errorMessage && (
+            {disabledDetails ? (
+              <m.div
+                initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                transition={springs.snappy}
+                className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs space-y-2.5"
+                role="alert"
+              >
+                <div className="flex items-center gap-2 font-bold text-rose-800 dark:text-rose-200">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>Account Deactivated</span>
+                </div>
+                <p>Your account has been deactivated by an administrator.</p>
+                <div className="p-2.5 rounded-lg bg-surface/80 border border-rose-500/30 text-[11px]">
+                  <span className="font-semibold text-text block mb-0.5">Reason:</span>
+                  <p className="italic text-rose-600 dark:text-rose-400">&ldquo;{disabledDetails.reason}&rdquo;</p>
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  If you believe this was done in error, please contact your workspace administrator.
+                </p>
+              </m.div>
+            ) : errorMessage ? (
               <m.div
                 initial={{ opacity: 0, y: -8, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -93,7 +126,7 @@ export default function LoginPage() {
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMessage}</span>
               </m.div>
-            )}
+            ) : null}
           </AnimatePresence>
 
           <form onSubmit={handleSubmit} className="space-y-4">

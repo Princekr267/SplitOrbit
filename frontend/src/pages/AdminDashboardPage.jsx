@@ -1103,13 +1103,20 @@ export default function AdminDashboardPage() {
                       </div>
                     </div>
 
-                    <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
-                      <Badge variant={u.role === 'admin' ? 'warning' : 'neutral'} size="xs">
-                        {u.role}
-                      </Badge>
-                      <Badge variant={u.isActive ? 'active' : 'danger'} size="xs">
-                        {u.isActive ? 'Active' : 'Disabled'}
-                      </Badge>
+                    <div className="col-span-2 flex flex-col items-start gap-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant={u.role === 'admin' ? 'warning' : 'neutral'} size="xs">
+                          {u.role}
+                        </Badge>
+                        <Badge variant={u.isActive ? 'active' : 'danger'} size="xs">
+                          {u.isActive ? 'Active' : 'Disabled'}
+                        </Badge>
+                      </div>
+                      {!u.isActive && u.deactivatedReason && (
+                        <span className="text-[10px] text-rose-500 italic block leading-tight truncate max-w-[140px]" title={u.deactivatedReason}>
+                          &ldquo;{u.deactivatedReason}&rdquo;
+                        </span>
+                      )}
                     </div>
 
                     <div className="col-span-2 text-text-muted text-[11px]">
@@ -1331,9 +1338,16 @@ export default function AdminDashboardPage() {
                         {g.status}
                       </Badge>
                       {g.isFrozen && (
-                        <Badge variant="danger" size="xs">
-                          🔒 Frozen
-                        </Badge>
+                        <div className="flex flex-col">
+                          <Badge variant="danger" size="xs">
+                            🔒 Frozen
+                          </Badge>
+                          {g.frozenReason && (
+                            <span className="text-[10px] text-amber-500 italic block leading-tight truncate max-w-[140px] mt-0.5" title={g.frozenReason}>
+                              &ldquo;{g.frozenReason}&rdquo;
+                            </span>
+                          )}
+                        </div>
                       )}
                       {g.isDeleted && (
                         <Badge variant="neutral" size="xs">
