@@ -3,8 +3,8 @@ import jwt from 'jsonwebtoken';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import env from '../config/env.js';
 import { db } from '../config/db.js';
-import { users, recoveryCodes, passwordResets, resetRequests, people } from '../models/index.js';
-import { COOKIE_NAME } from '../middleware/authMiddleware.js';
+import { users, recoveryCodes, passwordResets, resetRequests, people, groups } from '../models/index.js';
+import { COOKIE_NAME, getAuthCookieOptions, getClearCookieOptions } from '../middleware/authMiddleware.js';
 import {
   generateEightRecoveryCodes,
   verifyRecoveryCode,
@@ -30,13 +30,7 @@ function generateToken(userId, tokenVersion = 0) {
 }
 
 function setAuthCookie(res, token) {
-  res.cookie(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: env.NODE_ENV === 'production',
-    sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: '/',
-  });
+  res.cookie(COOKIE_NAME, token, getAuthCookieOptions());
 }
 
 function getClientIp(req) {
@@ -106,22 +100,23 @@ export async function register(req, res, next) {
     }
 
     const { name, username, password, email, phone, inviteCode } = req.body;
+    const cleanInviteCode = typeof inviteCode === 'string' ? inviteCode.trim() : '';
 
-    const allowRegistration = await getSetting('allowRegistration');
-    if (allowRegistration === false) {
-      if (!inviteCode || typeof inviteCode !== 'string' || !inviteCode.trim()) {
-        return res.status(403).json({
-          success: false,
-          error: {
-            code: 'REGISTRATION_DISABLED',
-            message: 'Registration is currently invite-only. A valid invite code is required.',
-          },
-        });
-      }
+    let invitePerson = null;
+    let inviteGroup = null;
 
-      const codeHash = hashToken(inviteCode.trim());
-      const [invitePerson] = await db
-        .select()
+    if (cleanInviteCode) {
+      const codeHash = hashToken(cleanInviteCode);
+      const [foundPerson] = await db
+        .select({
+          id: people.id,
+          groupId: people.groupId,
+          name: people.name,
+          isHost: people.isHost,
+          linkedUserId: people.linkedUserId,
+          inviteExpiresAt: people.inviteExpiresAt,
+          isDeleted: people.isDeleted,
+        })
         .from(people)
         .where(
           and(
@@ -130,15 +125,64 @@ export async function register(req, res, next) {
           )
         );
 
-      if (!invitePerson || invitePerson.linkedUserId || (invitePerson.inviteExpiresAt && new Date(invitePerson.inviteExpiresAt) < new Date())) {
-        return res.status(403).json({
+      if (!foundPerson) {
+        return res.status(400).json({
           success: false,
           error: {
-            code: 'INVALID_INVITE_CODE',
-            message: 'This invite code is invalid, expired, or already claimed.',
+            code: 'INVITE_INVALID',
+            message: 'This invite code is invalid or no longer exists.',
           },
         });
       }
+
+      if (foundPerson.linkedUserId) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVITE_INVALID',
+            message: 'This invite code has already been claimed.',
+          },
+        });
+      }
+
+      if (foundPerson.inviteExpiresAt && new Date(foundPerson.inviteExpiresAt) < new Date()) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVITE_INVALID',
+            message: 'This invite code has expired.',
+          },
+        });
+      }
+
+      const [foundGroup] = await db
+        .select({ id: groups.id, name: groups.name, isDeleted: groups.isDeleted })
+        .from(groups)
+        .where(eq(groups.id, foundPerson.groupId));
+
+      if (!foundGroup || foundGroup.isDeleted) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVITE_INVALID',
+            message: 'The group associated with this invite no longer exists.',
+          },
+        });
+      }
+
+      invitePerson = foundPerson;
+      inviteGroup = foundGroup;
+    }
+
+    const allowRegistration = await getSetting('allowRegistration');
+    if (allowRegistration === false && !invitePerson) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'REGISTRATION_DISABLED',
+          message: 'Registration is currently invite-only. A valid invite code is required.',
+        },
+      });
     }
 
     const cleanUsername = username.toLowerCase().trim();
@@ -175,9 +219,9 @@ export async function register(req, res, next) {
     // Generate 8 cryptographically secure recovery codes
     const generatedCodes = generateEightRecoveryCodes();
 
-    // Execute in transaction
-    const newUser = await db.transaction(async (tx) => {
-      const [createdUser] = await tx
+    // Execute in transaction: create user, insert recovery codes, and atomically link invite
+    const { createdUser, claimedInfo } = await db.transaction(async (tx) => {
+      const [user] = await tx
         .insert(users)
         .values({
           name: name.trim(),
@@ -203,35 +247,90 @@ export async function register(req, res, next) {
       // Insert 8 hashed recovery codes
       for (const rc of generatedCodes) {
         await tx.insert(recoveryCodes).values({
-          userId: createdUser.id,
+          userId: user.id,
           codeHash: rc.hash,
         });
       }
 
+      let claimed = null;
+      if (invitePerson) {
+        const [claimedPerson] = await tx
+          .update(people)
+          .set({
+            linkedUserId: user.id,
+            inviteCodeHash: null,
+            inviteExpiresAt: null,
+          })
+          .where(
+            and(
+              eq(people.id, invitePerson.id),
+              sql`${people.linkedUserId} IS NULL`
+            )
+          )
+          .returning();
+
+        if (!claimedPerson) {
+          throw {
+            status: 409,
+            code: 'CLAIM_RACE_LOST',
+            message: 'This invite was already claimed by another user.',
+          };
+        }
+
+        await recordAuditLog(
+          {
+            actor: { id: user.id, role: user.role, name: user.name },
+            action: 'invite.claim',
+            entityType: 'Person',
+            entityId: claimedPerson.id,
+            groupId: claimedPerson.groupId,
+            after: { linkedUserId: user.id },
+            ipAddress: ip,
+          },
+          tx
+        );
+
+        claimed = {
+          personId: claimedPerson.id,
+          groupId: claimedPerson.groupId,
+          groupName: inviteGroup.name,
+        };
+      }
+
       await recordAuditLog(
         {
-          actor: { id: createdUser.id, role: createdUser.role, name: createdUser.name },
+          actor: { id: user.id, role: user.role, name: user.name },
           action: 'auth.register',
           entityType: 'User',
-          entityId: createdUser.id,
-          after: { username: cleanUsername, name: createdUser.name },
+          entityId: user.id,
+          after: { username: cleanUsername, name: user.name },
           ipAddress: ip,
         },
         tx
       );
 
-      return createdUser;
+      return { createdUser: user, claimedInfo: claimed };
     });
+
+    const token = generateToken(createdUser.id, createdUser.tokenVersion || 0);
+    setAuthCookie(res, token);
 
     res.status(201).json({
       success: true,
       data: {
-        user: newUser,
-        // The plain recovery codes are returned ONCE here and NEVER again
+        user: createdUser,
+        token,
         recoveryCodes: generatedCodes.map((c) => c.plain),
+        claimed: claimedInfo ? { personId: claimedInfo.personId, groupName: claimedInfo.groupName } : undefined,
       },
     });
   } catch (error) {
+    if (error.code && error.status) {
+      return res.status(error.status).json({
+        success: false,
+        error: { code: error.code, message: error.message },
+      });
+    }
     next(error);
   }
 }
@@ -887,12 +986,7 @@ export async function dismissPasswordNotice(req, res, next) {
  * POST /api/auth/logout
  */
 export async function logout(req, res) {
-  res.clearCookie(COOKIE_NAME, {
-    httpOnly: true,
-    secure: env.NODE_ENV === 'production',
-    sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
-  });
+  res.clearCookie(COOKIE_NAME, getClearCookieOptions());
   res.json({
     success: true,
     message: 'Logged out successfully.',

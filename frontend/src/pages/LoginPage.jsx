@@ -10,6 +10,8 @@ import { Card } from '../components/common/Card.jsx';
 import { m, AnimatePresence } from 'motion/react';
 import { springs } from '../motion/tokens.js';
 
+import { isValidNextUrl } from '../utils/url.js';
+
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +20,8 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const [searchParams] = useSearchParams();
-  const returnUrl = searchParams.get('returnUrl') || '/dashboard';
+  const rawNext = searchParams.get('next') || searchParams.get('returnUrl');
+  const validNext = isValidNextUrl(rawNext) ? rawNext : null;
 
   const { login } = useAuth();
   const { addToast } = useToast();
@@ -32,9 +35,10 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      await login(cleanUsername, password);
+      const user = await login(cleanUsername, password);
       addToast('Welcome back!', 'success');
-      navigate(returnUrl);
+      const destination = validNext || (user?.role === 'admin' ? '/admin' : '/dashboard');
+      navigate(destination, { replace: true });
     } catch (err) {
       const msg = err.message || 'Invalid username or password';
       setErrorMessage(msg);
@@ -63,8 +67,8 @@ export default function LoginPage() {
           Or{' '}
           <Link
             to={
-              searchParams.get('returnUrl')
-                ? `/register?returnUrl=${encodeURIComponent(searchParams.get('returnUrl'))}`
+              validNext
+                ? `/register?next=${encodeURIComponent(validNext)}`
                 : '/register'
             }
             className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
@@ -111,7 +115,11 @@ export default function LoginPage() {
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-semibold text-text">Password</label>
                 <Link
-                  to="/forgot-password"
+                  to={
+                    validNext
+                      ? `/forgot-password?next=${encodeURIComponent(validNext)}`
+                      : '/forgot-password'
+                  }
                   className="text-xs text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 font-medium"
                 >
                   <KeyRound className="w-3 h-3" />

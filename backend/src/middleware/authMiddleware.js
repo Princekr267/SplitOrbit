@@ -6,6 +6,25 @@ import { users } from '../models/index.js';
 
 export const COOKIE_NAME = 'splitorbit_token';
 
+export function getAuthCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/',
+  };
+}
+
+export function getClearCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+  };
+}
+
 export async function authenticate(req, res, next) {
   try {
     const token =
@@ -17,7 +36,7 @@ export async function authenticate(req, res, next) {
       return res.status(401).json({
         success: false,
         error: {
-          code: 'UNAUTHORIZED',
+          code: 'AUTH_REQUIRED',
           message: 'Authentication required. Please log in.',
         },
       });

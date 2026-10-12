@@ -147,3 +147,13 @@
   }
 }
 
+/* iOS Safari dynamic viewport height support */
+@supports (min-height: 100dvh) {
+  .min-h-screen {
+    min-height: 100dvh !important;
+  }
+  .h-screen {
+    height: 100dvh !important;
+  }
+}
+

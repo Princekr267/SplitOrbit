@@ -12,7 +12,20 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
   RECOVERY_PEPPER: z.string().min(32, 'RECOVERY_PEPPER must be at least 32 characters'),
-});
+}).refine(
+  (data) => {
+    if (data.NODE_ENV === 'production') {
+      if (!data.FRONTEND_URL || data.FRONTEND_URL.includes('localhost') || data.FRONTEND_URL.includes('127.0.0.1')) {
+        return false;
+      }
+    }
+    return true;
+  },
+  {
+    message: 'FRONTEND_URL must be configured with a valid non-localhost URL in production',
+    path: ['FRONTEND_URL'],
+  }
+);
 
 const parsed = envSchema.safeParse(process.env);
 

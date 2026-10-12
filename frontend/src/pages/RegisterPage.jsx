@@ -23,6 +23,8 @@ import { Card } from '../components/common/Card.jsx';
 import { m, AnimatePresence } from 'motion/react';
 import { springs } from '../motion/tokens.js';
 
+import { isValidNextUrl } from '../utils/url.js';
+
 function getPasswordStrength(password, username) {
   if (!password) return { score: 0, label: 'Too short', color: 'bg-slate-300 dark:bg-slate-700' };
 
@@ -71,11 +73,14 @@ export default function RegisterPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const [searchParams] = useSearchParams();
-  const returnUrl = searchParams.get('returnUrl') || '/dashboard';
+  const rawNext = searchParams.get('next') || searchParams.get('returnUrl');
+  const validNext = isValidNextUrl(rawNext) ? rawNext : '/dashboard';
   const initialInvite = searchParams.get('invite') || searchParams.get('code') || '';
 
   const [allowRegistration, setAllowRegistration] = useState(true);
   const [inviteCode, setInviteCode] = useState(initialInvite);
+  const [invitePreview, setInvitePreview] = useState(null);
+  const [claimedGroupInfo, setClaimedGroupInfo] = useState(null);
 
   const { register } = useAuth();
   const { addToast } = useToast();
@@ -95,6 +100,27 @@ export default function RegisterPage() {
     }
     checkPublicSettings();
   }, []);
+
+  // Fetch invite preview if inviteCode is present
+  useEffect(() => {
+    async function checkInvitePreview() {
+      if (!inviteCode || !inviteCode.trim()) {
+        setInvitePreview(null);
+        return;
+      }
+      try {
+        const res = await api.get(`/invites/${encodeURIComponent(inviteCode.trim())}/preview`);
+        if (res.data?.valid) {
+          setInvitePreview(res.data);
+        } else {
+          setInvitePreview(null);
+        }
+      } catch {
+        setInvitePreview(null);
+      }
+    }
+    checkInvitePreview();
+  }, [inviteCode]);
 
   // Debounced username check
   useEffect(() => {
@@ -182,12 +208,20 @@ export default function RegisterPage() {
         inviteCode: inviteCode || undefined,
       });
 
+      if (result.claimed) {
+        setClaimedGroupInfo(result.claimed);
+      }
+
       if (result.recoveryCodes && result.recoveryCodes.length > 0) {
         setRegisteredRecoveryCodes(result.recoveryCodes);
       } else {
-        // Admin or user without codes
+        // User without codes
         addToast('Account created successfully! Welcome to SplitOrbit 🎉', 'success');
-        navigate(returnUrl);
+        if (result.claimed?.groupId) {
+          navigate(`/friend?groupId=${result.claimed.groupId}&personId=${result.claimed.personId || ''}`, { replace: true });
+        } else {
+          navigate(validNext, { replace: true });
+        }
       }
     } catch (err) {
       const msg = err.message || 'Registration failed';
@@ -227,7 +261,11 @@ export default function RegisterPage() {
     // Clear codes from memory
     setRegisteredRecoveryCodes(null);
     addToast('Account setup complete! Welcome to SplitOrbit 🎉', 'success');
-    navigate(returnUrl);
+    if (claimedGroupInfo?.groupId) {
+      navigate(`/friend?groupId=${claimedGroupInfo.groupId}&personId=${claimedGroupInfo.personId || ''}`, { replace: true });
+    } else {
+      navigate(validNext, { replace: true });
+    }
   };
 
   return (
@@ -252,8 +290,8 @@ export default function RegisterPage() {
             Already have an account?{' '}
             <Link
               to={
-                searchParams.get('returnUrl')
-                  ? `/login?returnUrl=${encodeURIComponent(searchParams.get('returnUrl'))}`
+                validNext && validNext !== '/dashboard'
+                  ? `/login?next=${encodeURIComponent(validNext)}`
                   : '/login'
               }
               className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
@@ -380,6 +418,18 @@ export default function RegisterPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {invitePreview && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-text flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span className="leading-snug">
+                    Joining <strong>{invitePreview.groupName}</strong> as profile{' '}
+                    <strong className="text-emerald-600 dark:text-emerald-400">
+                      {invitePreview.profileLabel}
+                    </strong>
+                  </span>
+                </div>
+              )}
+
               {(!allowRegistration || inviteCode) && (
                 <Input
                   label="Invitation Code"

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { m, AnimatePresence } from 'motion/react';
 import { springs, durations, easings } from '../../motion/tokens.js';
+import { lockBodyScroll, unlockBodyScroll } from '../../utils/overlayManager.js';
 
 export default function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' }) {
   useEffect(() => {
@@ -9,11 +10,13 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'ma
       if (e.key === 'Escape') onClose();
     };
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      lockBodyScroll();
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      if (isOpen) {
+        unlockBodyScroll();
+      }
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, onClose]);

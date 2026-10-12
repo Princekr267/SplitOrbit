@@ -23,6 +23,7 @@ import {
   hashResetToken,
   hashRecoveryCode,
 } from '../services/recoveryService.js';
+import { buildResetUrl } from '../utils/urlHelper.js';
 import {
   getAllSettings,
   getSetting,
@@ -1594,9 +1595,7 @@ export async function generateResetCredential(req, res, next) {
       );
     });
 
-    const host = req.get('host') || 'localhost:5173';
-    const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-    const link = `${protocol}://${host}/reset-password?token=${plainToken}`;
+    const link = buildResetUrl(plainToken);
 
     const formattedExpiry = expiresAt.toLocaleString(undefined, {
       month: 'short',
@@ -1605,7 +1604,7 @@ export async function generateResetCredential(req, res, next) {
       minute: '2-digit',
     });
 
-    const whatsappMessage = `Hi ${targetUser.name}, here is your password reset link for SplitTrack (username: @${targetUser.username}):\n\nLink: ${link}\nOr 6-digit code: ${formattedCode}\n\nExpires in ${hours} hour(s) on ${formattedExpiry}. Click the link to choose your new password.`;
+    const whatsappMessage = `Hi ${targetUser.name}, here is your password reset link for SplitOrbit (username: @${targetUser.username}):\n\nLink: ${link}\nOr reset code: ${formattedCode}\n\nExpires in ${hours} hour(s) on ${formattedExpiry}. Choose your new password.`;
 
     res.json({
       success: true,

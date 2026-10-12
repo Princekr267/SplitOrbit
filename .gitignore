@@ -49,6 +49,11 @@ frontend/dist/
 *.tsbuildinfo
 .eslintcache
 .oxlint_cache/
+tmp/
+temp/
+*.tmp
+*.temp
+scratch/
 
 # ------------------------------------------------------------------------------
 # Logs & Process Outputs
@@ -62,10 +67,22 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # ------------------------------------------------------------------------------
-# Testing & Code Coverage
+# Testing, Test Suites & Code Coverage
 # ------------------------------------------------------------------------------
 coverage/
 .nyc_output/
+*.lcov
+test-results/
+test-reports/
+playwright-report/
+blob-report/
+.vitest/
+
+# Test files and test directories
+**/__tests__/
+**/*.test.*
+**/*.spec.*
+backend/src/tests/
 
 # ------------------------------------------------------------------------------
 # Database & Local Dumps

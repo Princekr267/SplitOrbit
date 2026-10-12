@@ -158,7 +158,7 @@ export default function ResetPasswordPage() {
                   mode === 'code' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'
                 }`}
               >
-                6-Digit Reset Code
+                Admin Reset Code
               </button>
               <button
                 type="button"
@@ -247,14 +247,20 @@ export default function ResetPasswordPage() {
                   />
 
                   <Input
-                    label="6-Digit Reset Code"
+                    label="Admin Reset Code"
                     type="text"
-                    maxLength={6}
+                    maxLength={9}
                     required
-                    placeholder="e.g. 492018"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    placeholder="e.g. K9MN-24PX"
                     value={resetCode}
-                    onChange={(e) => setResetCode(e.target.value.replace(/\D/g, ''))}
-                    hint="Given to you by your host or administrator"
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+                      setResetCode(val);
+                    }}
+                    hint="Single-use code issued by platform administrator (e.g. K9MN-24PX)"
                   />
                 </>
               )}

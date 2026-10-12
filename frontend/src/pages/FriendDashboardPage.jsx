@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/common/Navbar.jsx';
 import Badge from '../components/common/Badge.jsx';
 import Modal from '../components/common/Modal.jsx';
+import ErrorState from '../components/common/ErrorState.jsx';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -43,6 +44,7 @@ export default function FriendDashboardPage() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
 
   // Expanded statement per profile id
   const [expandedProfileId, setExpandedProfileId] = useState(null);
@@ -103,12 +105,14 @@ export default function FriendDashboardPage() {
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
+      setError(null);
 
       const res = await api.get('/friend/profiles');
       if (res.success) {
         setProfiles(res.data || []);
       }
     } catch (err) {
+      setError(err);
       addToast(err.message || 'Failed to load your friend profiles', 'error');
     } finally {
       setLoading(false);
@@ -116,8 +120,15 @@ export default function FriendDashboardPage() {
     }
   }, [addToast]);
 
+  const [searchParams] = useSearchParams();
+  const targetGroupId = searchParams.get('groupId');
+  const targetPersonId = searchParams.get('personId');
+
   useEffect(() => {
     fetchProfiles();
+    const handleVisRefresh = () => fetchProfiles(true);
+    window.addEventListener('splitorbit:visibility-refresh', handleVisRefresh);
+    return () => window.removeEventListener('splitorbit:visibility-refresh', handleVisRefresh);
   }, [fetchProfiles]);
 
   const loadStatementForProfile = async (profile) => {
@@ -168,6 +179,20 @@ export default function FriendDashboardPage() {
       setLoadingStatementId(null);
     }
   };
+
+  // Auto-expand statement if targeted via URL query params (e.g. redirected from claim)
+  useEffect(() => {
+    if (profiles.length > 0 && (targetPersonId || targetGroupId)) {
+      const target = profiles.find(
+        (p) =>
+          (targetPersonId && p.person?.id === targetPersonId) ||
+          (targetGroupId && p.group?.id === targetGroupId)
+      );
+      if (target && expandedProfileId !== target.person?.id) {
+        loadStatementForProfile(target);
+      }
+    }
+  }, [profiles, targetGroupId, targetPersonId]);
 
   const handleOpenSubmitPayment = (profile) => {
     setActiveProfileForPayment(profile);
@@ -321,6 +346,15 @@ export default function FriendDashboardPage() {
             <span>Refresh</span>
           </button>
         </div>
+
+        {error && (
+          <ErrorState
+            title="Failed to load friend profiles"
+            error={error}
+            onRetry={() => fetchProfiles(true)}
+            className="my-4"
+          />
+        )}
 
         {/* Global Summary Cards Bento */}
         {profiles.length > 0 && (

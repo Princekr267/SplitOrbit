@@ -2,11 +2,12 @@ import bcrypt from 'bcryptjs';
 import { sql, eq } from 'drizzle-orm';
 import { db, pool } from '../config/db.js';
 
-import { users, groups, people, expenses, expenseSplits, payments } from '../models/index.js';
+import { users, groups, people, expenses, expenseSplits, payments, passwordResets } from '../models/index.js';
 import { createGroupWithHost } from '../services/groupService.js';
 import { processSplits } from '../services/splitService.js';
 import { calculateGroupBalances } from '../services/balanceService.js';
 import { hashToken } from '../services/tokenService.js';
+import { hashRecoveryCode, hashResetToken } from '../services/recoveryService.js';
 
 async function seed() {
   console.log('🌱 Starting SplitOrbit seed script...');
@@ -15,6 +16,7 @@ async function seed() {
   await db.execute(sql`
     TRUNCATE TABLE 
       audit_logs, 
+      password_resets,
       payments, 
       expense_splits, 
       expenses, 
@@ -98,6 +100,7 @@ async function seed() {
     })
     .returning();
 
+  // Valid Invite
   const [neha] = await db
     .insert(people)
     .values({
@@ -106,11 +109,12 @@ async function seed() {
       phone: '+91 98765 43211',
       note: 'Arranged photography',
       isHost: false,
-      inviteCodeHash: hashToken('demo-invite-code-neha'),
+      inviteCodeHash: hashToken('DEMO-VALID-INVITE'),
       inviteExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     })
     .returning();
 
+  // Used / Claimed Invite (Linked to User Account)
   const [karan] = await db
     .insert(people)
     .values({
@@ -134,8 +138,47 @@ async function seed() {
     })
     .returning();
 
+  // Expired Invite
+  const [pooja] = await db
+    .insert(people)
+    .values({
+      groupId: group.id,
+      name: 'Pooja Expired',
+      phone: '+91 98765 43214',
+      note: 'Pending invite that passed its expiration date',
+      isHost: false,
+      inviteCodeHash: hashToken('DEMO-EXPIRED-INVITE'),
+      inviteExpiresAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+    })
+    .returning();
+
+  // Revoked Share Link
+  const [dev] = await db
+    .insert(people)
+    .values({
+      groupId: group.id,
+      name: 'Dev Revoked',
+      phone: '+91 98765 43215',
+      note: 'Previous view link was revoked by the host',
+      isHost: false,
+      shareTokenHash: hashToken('demo-revoked-share-token'),
+      shareEnabled: false,
+    })
+    .returning();
+
+  // Admin-generated Password Reset Ticket for Karan (@karan)
+  const demoResetToken = 'demo-admin-reset-token-karan';
+  const demoResetCodeRaw = 'K7M29QXP'; // formatted: K7M2-9QXP
+  await db.insert(passwordResets).values({
+    userId: friendUser.id,
+    tokenHash: hashResetToken(demoResetToken),
+    codeHash: hashRecoveryCode(demoResetCodeRaw),
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    createdByAdminId: admin.id,
+  });
+
   const friendPersons = [aarav, neha, karan, ananya];
-  console.log(`✅ Added ${friendPersons.length} friends to group (Karan claimed, Aarav shared, Neha invited)`);
+  console.log(`✅ Added friends to group (Karan claimed, Aarav valid share, Dev revoked share, Neha valid invite, Pooja expired invite)`);
 
   const allMembers = [hostPerson, ...friendPersons];
 
@@ -446,6 +489,21 @@ async function seed() {
     console.log(`   ${roleTag} ${p.name.padEnd(16)}: ${statusText}`);
   }
 
+
+  console.log('\n🔗 Demo Testing URLs & Credentials:');
+  console.log('   👤 Accounts (password for all: hostpassword123 / adminpassword123 / friendpassword123):');
+  console.log('      • Admin: admin (@admin)');
+  console.log('      • Host:  vikram (@vikram)');
+  console.log('      • Friend (Claimed): karan (@karan)');
+  console.log('   📄 Level 1 Public View Links:');
+  console.log('      • Valid:   /s/demo-share-token-aarav (Aarav)');
+  console.log('      • Revoked: /s/demo-revoked-share-token (Dev - should show revoked state)');
+  console.log('   🎟️ Level 2 Single-Use Invite Links:');
+  console.log('      • Valid:   /invite/DEMO-VALID-INVITE (Neha - ready to claim or register)');
+  console.log('      • Expired: /invite/DEMO-EXPIRED-INVITE (Pooja - should show expired state)');
+  console.log('   🔑 Admin Password Reset Credentials:');
+  console.log('      • Link:  /reset-password?token=demo-admin-reset-token-karan');
+  console.log('      • Code:  K7M2-9QXP (User: karan)');
 
   console.log('\n✨ SplitOrbit database successfully seeded with demo data!\n');
 }

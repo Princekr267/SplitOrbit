@@ -9,6 +9,7 @@ import EmptyState from '../components/common/EmptyState.jsx';
 import { SkeletonCard, SkeletonStat, SkeletonRow } from '../components/common/Skeleton.jsx';
 import ConfirmDialog from '../components/common/ConfirmDialog.jsx';
 import Modal from '../components/common/Modal.jsx';
+import ErrorState from '../components/common/ErrorState.jsx';
 import AddPersonModal from '../components/forms/AddPersonModal.jsx';
 import AddExpenseModal from '../components/forms/AddExpenseModal.jsx';
 import AddPaymentModal from '../components/forms/AddPaymentModal.jsx';
@@ -67,6 +68,7 @@ export default function GroupDetailPage() {
   const [payments, setPayments] = useState([]);
   const [isHost, setIsHost] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   // Analytics for interactive charts
   const [analytics, setAnalytics] = useState(null);
@@ -123,6 +125,7 @@ export default function GroupDetailPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setFetchError(null);
       // Kick off analytics in parallel with group/expenses/payments to eliminate sequential waterfall
       const analyticsPromise = api.get(`/groups/${groupId}/analytics`).catch((err) => ({ error: err }));
 
@@ -158,6 +161,7 @@ export default function GroupDetailPage() {
         setPayments(payRes.data || []);
       }
     } catch (err) {
+      setFetchError(err.message || 'Failed to load group details');
       addToast(err.message || 'Failed to load group details', 'error');
     } finally {
       setLoading(false);
@@ -168,16 +172,23 @@ export default function GroupDetailPage() {
     fetchData();
   }, [fetchData]);
 
-  // Background refetch on window focus
+  // Background refetch on window focus and visibility foreground restore
   useEffect(() => {
     const handleFocus = () => {
       if (isHost || user?.role === 'admin') {
         fetchAnalytics();
       }
     };
+    const handleVisibilityRefresh = () => {
+      fetchData();
+    };
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [isHost, user, fetchAnalytics]);
+    window.addEventListener('splitorbit:visibility-refresh', handleVisibilityRefresh);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('splitorbit:visibility-refresh', handleVisibilityRefresh);
+    };
+  }, [isHost, user, fetchAnalytics, fetchData]);
 
   const handleConfirmSettle = async () => {
     if (!summary?.isSettledReady) {
@@ -347,6 +358,22 @@ ${balanceLine}`);
             <SkeletonCard count={4} />
           </div>
         </main>
+      </div>
+    );
+  }
+
+  if (fetchError && !group) {
+    return (
+      <div className="min-h-screen bg-background text-text flex flex-col transition-colors">
+        <Navbar />
+        <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-md mx-auto w-full">
+          <ErrorState
+            title="Failed to load group"
+            error={fetchError}
+            onRetry={fetchData}
+            className="w-full"
+          />
+        </div>
       </div>
     );
   }

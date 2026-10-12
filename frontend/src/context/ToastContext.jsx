@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { m, AnimatePresence } from 'motion/react';
 import { durations, easings } from '../motion/tokens.js';
@@ -8,9 +8,9 @@ const ToastContext = createContext(null);
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
-  const addToast = useCallback((message, type = 'info', duration = 3500) => {
+  const addToast = useCallback((message, type = 'info', duration = 3500, action = null) => {
     const id = Date.now() + Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message, type, action }]);
 
     if (duration > 0) {
       setTimeout(() => {
@@ -22,6 +22,19 @@ export function ToastProvider({ children }) {
   const removeToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Listen for global toast events emitted outside the React render tree (e.g. stability handlers)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleGlobalToast = (e) => {
+      const { message, type = 'info', duration = 4000, action = null } = e.detail || {};
+      if (message) {
+        addToast(message, type, duration, action);
+      }
+    };
+    window.addEventListener('splitorbit:toast', handleGlobalToast);
+    return () => window.removeEventListener('splitorbit:toast', handleGlobalToast);
+  }, [addToast]);
 
   return (
     <ToastContext.Provider value={{ addToast }}>
@@ -65,14 +78,30 @@ export function ToastProvider({ children }) {
                   {!isSuccess && !isError && <Info className="w-5 h-5 text-sky-400 shrink-0" />}
                   <p className="text-sm font-medium leading-tight truncate">{toast.message}</p>
                 </div>
-                <m.button
-                  whileTap={{ scale: 0.88 }}
-                  onClick={() => removeToast(toast.id)}
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg shrink-0 transition cursor-pointer"
-                  aria-label="Dismiss notification"
-                >
-                  <X className="w-4 h-4" />
-                </m.button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {toast.action && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          toast.action.onClick();
+                        } catch {}
+                        removeToast(toast.id);
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-850 dark:hover:bg-slate-750 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                    >
+                      {toast.action.label || 'Action'}
+                    </button>
+                  )}
+                  <m.button
+                    whileTap={{ scale: 0.88 }}
+                    onClick={() => removeToast(toast.id)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg shrink-0 transition cursor-pointer"
+                    aria-label="Dismiss notification"
+                  >
+                    <X className="w-4 h-4" />
+                  </m.button>
+                </div>
               </m.div>
             );
           })}

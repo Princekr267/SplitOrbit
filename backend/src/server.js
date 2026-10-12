@@ -33,8 +33,8 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile, curl, health checks) or matching allowed origins
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      // Allow requests with no origin (mobile apps, curl, health checks) or matching allowed origins exactly
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
       return callback(new Error(`CORS origin not allowed: ${origin}`));
@@ -66,6 +66,7 @@ app.use('/api/groups/:groupId/expenses', expenseRoutes);
 app.use('/api/groups/:groupId/payments', paymentRoutes);
 app.use('/api/s', shareRoutes);
 app.use('/api/invite', inviteRoutes);
+app.use('/api/invites', inviteRoutes);
 app.use('/api/friend', friendRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);

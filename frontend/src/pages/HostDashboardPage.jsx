@@ -7,6 +7,7 @@ import Button from '../components/common/Button.jsx';
 import { Card } from '../components/common/Card.jsx';
 import { SkeletonStat, SkeletonCard } from '../components/common/Skeleton.jsx';
 import EmptyState from '../components/common/EmptyState.jsx';
+import ErrorState from '../components/common/ErrorState.jsx';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { formatDate } from '../utils/date.js';
@@ -134,15 +135,12 @@ export default function HostDashboardPage() {
 
         {/* Error State with Retry */}
         {error && (
-          <div className="p-5 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <span className="text-xs font-semibold">{error}</span>
-            </div>
-            <Button size="sm" variant="secondary" onClick={fetchGroups} iconLeft={<RefreshCw className="w-3.5 h-3.5" />}>
-              Retry
-            </Button>
-          </div>
+          <ErrorState
+            title="Failed to load hosted groups"
+            error={error}
+            onRetry={fetchGroups}
+            className="my-4"
+          />
         )}
 
         {/* Hosted Groups Section */}

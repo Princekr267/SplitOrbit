@@ -4,6 +4,7 @@ import { people, groups, expenses, expenseSplits, payments, users } from '../mod
 import { ensureGroupNotSettled } from '../services/groupService.js';
 import { recordAuditLog } from '../services/auditService.js';
 import { generateSecureToken, hashToken } from '../services/tokenService.js';
+import { buildShareUrl } from '../utils/urlHelper.js';
 import env from '../config/env.js';
 
 export async function addPerson(req, res, next) {
@@ -316,7 +317,7 @@ export async function generateShareLink(req, res, next) {
       ipAddress: req.ip,
     });
 
-    const viewUrl = `${env.FRONTEND_URL}/s/${rawToken}`;
+    const viewUrl = buildShareUrl(rawToken);
 
     res.json({
       success: true,

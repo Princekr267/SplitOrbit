@@ -13,9 +13,11 @@ import { m, AnimatePresence } from 'motion/react';
 import { springs, durations, easings } from '../../motion/tokens.js';
 import { safeEvaluate, calculateSplitBreakdown } from '../../utils/mathParser.js';
 import { useToast } from '../../context/ToastContext.jsx';
+import { lockBodyScroll, unlockBodyScroll } from '../../utils/overlayManager.js';
 
 export default function Calculator() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('calc'); // 'calc' | 'split'
   const [expression, setExpression] = useState('');
   const [result, setResult] = useState(null);
@@ -63,7 +65,36 @@ export default function Calculator() {
         lastFocusedInputRef.current = null;
         setHasTargetInput(false);
       }
+      // Lock scroll on mobile screens when panel is open
+      if (typeof window !== 'undefined' && window.innerWidth < 640) {
+        lockBodyScroll();
+      }
+    } else {
+      if (typeof window !== 'undefined' && window.innerWidth < 640) {
+        unlockBodyScroll();
+      }
     }
+    return () => {
+      if (typeof window !== 'undefined' && window.innerWidth < 640) {
+        unlockBodyScroll();
+      }
+    };
+  }, [isOpen]);
+
+  // Hide floating calculator button whenever a modal or bottom sheet is open
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const checkModal = () => {
+      const open = document.body.hasAttribute('data-modal-open');
+      setIsModalOpen(open);
+      if (open && isOpen) {
+        setIsOpen(false);
+      }
+    };
+    checkModal();
+    const observer = new MutationObserver(checkModal);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['data-modal-open'] });
+    return () => observer.disconnect();
   }, [isOpen]);
 
   // Global custom event triggers so other components (Navbar, modals) can toggle or open calculator
@@ -304,7 +335,9 @@ export default function Calculator() {
         title={isOpen ? "Close Calculator" : "Open Calculator"}
         aria-label="Open financial calculator"
         aria-expanded={isOpen}
-        className={`fixed bottom-6 left-4 sm:left-6 z-[9999] w-12 h-12 sm:w-14 sm:h-14 rounded-2xl shadow-2xl transition-all duration-200 flex items-center justify-center border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
+        className={`fixed bottom-6 left-4 sm:left-6 z-40 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl shadow-2xl transition-all duration-200 flex items-center justify-center border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
+          isModalOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100'
+        } ${
           isOpen
             ? 'bg-slate-800 text-white border-slate-700 rotate-90 shadow-slate-900/40'
             : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-400 shadow-emerald-500/25'
@@ -336,7 +369,7 @@ export default function Calculator() {
               stiffness: 340,
               mass: 0.9,
             }}
-            className="fixed inset-x-0 bottom-0 sm:inset-auto sm:bottom-24 sm:left-6 z-[9999] w-full sm:w-[360px] bg-white dark:bg-slate-900 border-t sm:border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col max-h-[88vh] sm:max-h-[640px] text-slate-900 dark:text-slate-100 transition-colors ring-1 ring-border/50"
+            className="fixed inset-x-0 bottom-0 sm:inset-auto sm:bottom-24 sm:left-6 z-50 w-full sm:w-[360px] bg-white dark:bg-slate-900 border-t sm:border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col max-h-[88vh] sm:max-h-[640px] text-slate-900 dark:text-slate-100 transition-colors ring-1 ring-border/50"
           >
           {/* Top Header & Tabs */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/70 shrink-0">

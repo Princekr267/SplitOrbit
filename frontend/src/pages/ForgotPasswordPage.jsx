@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext.jsx';
 import api from '../api/client.js';
+import { isValidNextUrl } from '../utils/url.js';
 import {
   Split,
   KeyRound,
@@ -25,6 +26,9 @@ export default function ForgotPasswordPage() {
   const [activeTab, setActiveTab] = useState('hub'); // 'hub' | 'code' | 'request'
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawNext = searchParams.get('next') || searchParams.get('returnUrl');
+  const validNext = isValidNextUrl(rawNext) ? rawNext : null;
 
   // Recovery Code Form State
   const [codeUsername, setCodeUsername] = useState('');
@@ -124,7 +128,14 @@ export default function ForgotPasswordPage() {
         <h2 className="text-xl font-bold text-text">Account Recovery</h2>
         <p className="mt-1 text-xs text-text-muted">
           Remember your password?{' '}
-          <Link to="/login" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold">
+          <Link
+            to={
+              validNext
+                ? `/login?next=${encodeURIComponent(validNext)}`
+                : '/login'
+            }
+            className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
+          >
             Sign in
           </Link>
         </p>
@@ -164,36 +175,7 @@ export default function ForgotPasswordPage() {
                 <ArrowRight className="w-4 h-4 text-text-muted group-hover:text-brand-500 group-hover:translate-x-0.5 transition shrink-0 self-center" />
               </div>
 
-              {/* Option B */}
-              <div className="p-3.5 rounded-xl border border-border bg-surface-muted/30 flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-text">Option B (Trip Friends)</span>
-                    <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                      Fastest
-                    </span>
-                  </div>
-                  <p className="text-xs font-semibold text-text mt-0.5">Ask Your Trip Host</p>
-                  <p className="text-[11px] text-text-muted mt-0.5">
-                    If you share an active trip with a host, they can reset your password directly from their
-                    group dashboard and give you a single-use link or 6-digit code.
-                  </p>
-                  <div className="mt-2">
-                    <Link
-                      to="/reset-password"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline"
-                    >
-                      <span>Have a code or link from your host? Enter it here</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </Link>
-                  </div>
-                </div>
-              </div>
-
-              {/* Option C */}
+              {/* Option B: Admin Reset Request */}
               <div
                 onClick={() => setActiveTab('request')}
                 className="p-3.5 rounded-xl border border-border hover:border-amber-500/50 bg-surface hover:bg-surface-muted/60 transition cursor-pointer flex items-start gap-3 group"
@@ -203,14 +185,14 @@ export default function ForgotPasswordPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-text">Option C (Fallback)</span>
+                    <span className="text-xs font-bold text-text">Option B (Admin Assisted)</span>
                     <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                      Operator
+                      Verified
                     </span>
                   </div>
                   <p className="text-xs font-semibold text-text mt-0.5">Request an Admin Reset</p>
                   <p className="text-[11px] text-text-muted mt-0.5">
-                    Submit a ticket to the platform administrator to verify your identity and issue a reset code.
+                    Lost all recovery codes? Submit an identity verification ticket to the platform administrator to issue a single-use reset credential.
                   </p>
                 </div>
                 <ArrowRight className="w-4 h-4 text-text-muted group-hover:text-amber-500 group-hover:translate-x-0.5 transition shrink-0 self-center" />
@@ -222,7 +204,7 @@ export default function ForgotPasswordPage() {
                 to="/reset-password"
                 className="text-xs text-text-muted hover:text-text underline font-medium"
               >
-                Already have a reset link or 6-digit reset code? Click here to reset your password
+                Already have an admin reset link or 8-character reset code? Click here to set your new password
               </Link>
             </div>
           </div>

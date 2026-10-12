@@ -6,7 +6,12 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import { MotionConfig, LazyMotion, domAnimation } from './motion/index.js';
+import { setupChunkReloadHandler } from './utils/chunkReload.js';
+import { setupStabilityListeners } from './utils/stability.js';
 import './index.css';
+
+setupChunkReloadHandler();
+setupStabilityListeners();
 
 const isTestEnv = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
 

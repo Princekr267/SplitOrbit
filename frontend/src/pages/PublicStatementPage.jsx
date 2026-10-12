@@ -10,15 +10,23 @@ import {
   TrendingDown,
   TrendingUp,
   CheckCircle2,
+  Copy,
+  Check,
 } from 'lucide-react';
 import api from '../api/client.js';
 import Badge from '../components/common/Badge.jsx';
 import Button from '../components/common/Button.jsx';
 import { Card } from '../components/common/Card.jsx';
 import EmptyState from '../components/common/EmptyState.jsx';
+import ErrorState from '../components/common/ErrorState.jsx';
 import ThemeToggle from '../components/common/ThemeToggle.jsx';
 import AnimatedAmount from '../components/common/AnimatedAmount.jsx';
 import FriendStatementSkeleton from '../components/charts/FriendStatementSkeleton.jsx';
+import ErrorBoundary from '../components/common/ErrorBoundary.jsx';
+import BrandedAuthSkeleton from '../components/common/BrandedAuthSkeleton.jsx';
+import { formatINR } from '../utils/currency.js';
+import { formatDate } from '../utils/date.js';
+import { useToast } from '../context/ToastContext.jsx';
 
 const FriendStatementCharts = React.lazy(() => import('../components/charts/FriendStatementCharts.jsx'));
 
@@ -47,44 +55,48 @@ export default function PublicStatementPage() {
     }
   };
 
-  useEffect(() => {
-    async function fetchStatement() {
-      try {
-        setLoading(true);
-        const res = await api.get(`/s/${token}`);
-        if (res.success) {
-          setData(res.data);
-          // Lazy-load analytics after statement data
-          fetchAnalytics();
-        }
-      } catch (err) {
-        setError(err.message || 'This shared statement link is invalid or has expired.');
-      } finally {
-        setLoading(false);
+  const fetchStatement = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get(`/s/${token}`);
+      if (res.success) {
+        setData(res.data);
+        // Lazy-load analytics after statement data
+        fetchAnalytics();
       }
+    } catch (err) {
+      setError(err.message || 'This shared statement link is invalid or has expired.');
+    } finally {
+      setLoading(false);
     }
-    fetchStatement();
   }, [token]);
 
+  useEffect(() => {
+    fetchStatement();
+  }, [fetchStatement]);
+
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background text-text flex flex-col items-center justify-center p-4">
-        <div className="w-8 h-8 rounded-full border-2 border-brand-500 border-t-transparent animate-spin mb-3" />
-        <p className="text-xs text-text-muted">Loading passbook statement...</p>
-      </div>
-    );
+    return <BrandedAuthSkeleton message="Loading passbook statement..." />;
   }
 
   if (error || !data) {
     return (
       <div className="min-h-screen bg-background text-text flex flex-col items-center justify-center p-4 text-center">
-        <EmptyState
-          icon={<AlertCircle className="w-6 h-6 text-rose-500" />}
+        <ErrorState
           title="Statement Unavailable"
-          description={error || 'This link may have been revoked by the host or does not exist.'}
-          actionText="Return to SplitOrbit"
-          onAction={() => window.location.href = '/'}
+          message={error || 'This link may have been revoked by the host or does not exist.'}
+          onRetry={fetchStatement}
+          actionText="Retry Loading Statement"
         />
+        <div className="mt-4">
+          <Link
+            to="/"
+            className="text-xs text-text-muted hover:text-text underline font-medium"
+          >
+            Return to SplitOrbit Home
+          </Link>
+        </div>
       </div>
     );
   }
@@ -192,15 +204,32 @@ export default function PublicStatementPage() {
           </div>
         </div>
 
-        {/* Lazy-Loaded Friend Visualizations (Your dues over time + Repayment ring) */}
-        <React.Suspense fallback={<FriendStatementSkeleton />}>
-          <FriendStatementCharts
-            analytics={analytics}
-            loading={analyticsLoading}
-            error={analyticsError}
-            onRetry={fetchAnalytics}
-          />
-        </React.Suspense>
+        {/* Lazy-Loaded Friend Visualizations (Protected by ErrorBoundary) */}
+        <ErrorBoundary
+          title="Charts Unavailable"
+          message="Visual charts could not be loaded for this statement."
+          fallback={(err, retry) => (
+            <div className="p-4 rounded-xl bg-surface border border-border text-center text-xs text-text-muted flex items-center justify-between">
+              <span>Visualizations temporarily unavailable.</span>
+              <button
+                type="button"
+                onClick={retry}
+                className="font-semibold underline text-text cursor-pointer hover:text-brand-500"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+        >
+          <React.Suspense fallback={<FriendStatementSkeleton />}>
+            <FriendStatementCharts
+              analytics={analytics}
+              loading={analyticsLoading}
+              error={analyticsError}
+              onRetry={fetchAnalytics}
+            />
+          </React.Suspense>
+        </ErrorBoundary>
 
         {/* Call To Action Banner: Sign up / Claim profile */}
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-surface-raised to-surface border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">

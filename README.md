@@ -100,30 +100,63 @@ The database seed provides pre-configured accounts with realistic group expenses
 | **Host** | `host@splitorbit.com` | `hostpassword123` | "Manali Road Trip" group, pending approvals inbox, settle modal |
 | **Friend** | `friend@splitorbit.com` | `friendpassword123` | Friend Passbook (`/friend`), linked profile for Karan Patel |
 
-### Demo Share & Invite Links
-- **Public Passbook (Aarav Sharma)**: [http://localhost:5173/s/demo-share-token-aarav](http://localhost:5173/s/demo-share-token-aarav)
-- **Claim Invite (Neha Verma)**: [http://localhost:5173/invite/demo-invite-code-neha](http://localhost:5173/invite/demo-invite-code-neha)
+### Demo Share, Invite & Password Reset Credentials
+
+The seed script provides ready-to-test links and recovery credentials:
+
+| Type | Target / User | Link / Code | Expected Outcome |
+|---|---|---|---|
+| **Level 1 Public View (Valid)** | Aarav Sharma | `/s/demo-share-token-aarav` | Renders passbook ledger, net totals, and charts without login |
+| **Level 1 Public View (Revoked)** | Dev Revoked | `/s/demo-revoked-share-token` | Renders friendly "Statement Revoked / Invalid" state |
+| **Level 2 Claim Invite (Valid)** | Neha Verma | `/invite/DEMO-VALID-INVITE` | Welcome card with 1-click Join or Register & Claim |
+| **Level 2 Claim Invite (Expired)** | Pooja Expired | `/invite/DEMO-EXPIRED-INVITE` | Renders friendly "Invite Expired" message |
+| **Level 2 Claim Invite (Used)** | Karan Patel | Profile claimed by `@karan` | Prevents duplicate claiming; redirects to member passbook |
+| **Admin Password Reset (Link)** | Karan Patel | `/reset-password?token=demo-admin-reset-token-karan` | Validates token and resets password directly |
+| **Admin Password Reset (Code)** | Karan Patel | Code: `K7M2-9QXP` (User: `karan`) | Accepts 8-char code with/without hyphen on `/reset-password` |
+
+---
+
+## 🌐 Topology, Cookies & API Proxy Architecture
+
+SplitOrbit is designed for first-party cookie resilience across modern mobile browsers (iOS Safari ITP, Android Chrome third-party cookie restrictions):
+
+1. **Same-Origin API Proxy**:
+   - In production on Vercel, `frontend/vercel.json` rewrites `/api/:path*` to the backend service.
+   - The browser communicates strictly with the primary site domain (`our-split-track.vercel.app`), completely eliminating cross-origin cookie drops.
+2. **First-Party HTTP-Only Session Cookies**:
+   - Authentication tokens are set as HTTP-only cookies (`SameSite=Lax`, `Path=/`, `Secure` in production).
+   - Because all requests flow through the first-party proxy, Safari's Intelligent Tracking Prevention (ITP) never suppresses or purges the session.
+3. **Link Generation (`FRONTEND_URL`)**:
+   - The backend validates `FRONTEND_URL` on startup.
+   - All generated view links (`/s/:token`), invite links (`/invite/:code`), and reset links (`/reset-password?token=...`) are built from this validated base URL, ensuring links never point to internal API hosts.
 
 ---
 
 ## 🧪 Automated Test Suite
 
-SplitOrbit includes comprehensive backend test coverage tested directly against real PostgreSQL:
+SplitOrbit includes comprehensive backend and frontend test coverage:
 
 ```bash
+# Run backend integration tests against real PostgreSQL test DB
 cd backend
+npm test
+
+# Run frontend tests
+cd ../frontend
 npm test
 ```
 
-### Test Coverage Highlights (29 Tests across 8 Test Suites):
-1. **`split.test.js`**: Equal split rounding, exact sum validation, percentage basis points calculation.
-2. **`balance.test.js`**: Invariant $\sum \text{net} \equiv 0$, cash/online payment deduction, pending payment exclusion from balances.
-3. **`group.test.js`**: Host person atomic creation in transaction, partial unique index constraint enforcement, settle/reopen state transitions.
-4. **`mathParser.test.js`**: Safe Shunting-Yard arithmetic evaluation, operator precedence, invalid syntax handling, zero `eval`.
-5. **`privacy.test.js`**: Uniform 404 for invalid/revoked share tokens, strict column projection with zero leakage of group member data to friends.
-6. **`claim.test.js`**: Race-free atomic claim profile flow, duplicate prevention, expired token handling.
-7. **`payment-flow.test.js`**: End-to-end friend payment submission $\rightarrow$ host rejection $\rightarrow$ friend resubmission $\rightarrow$ host acceptance $\rightarrow$ balance deduction.
-8. **`admin.test.js`**: Admin guard enforcement, system volume statistics, user status toggling, and audit log querying.
+### Test Coverage Highlights:
+- **Backend (93 Tests across 15 Test Files)**:
+  1. `phase1-auth-session.test.js`: First-party cookie emission, strict CORS allow-list enforcement, link generation.
+  2. `phase2-invite-claim.test.js`: Public invite preview privacy, row-locked atomic claim, duplicate prevention, host claim rejection.
+  3. `phase3-view-reset.test.js`: Share link passbook calculation, 404 on revoked links, 8-character admin code reset, token reset validation.
+  4. `split.test.js`, `balance.test.js`, `group.test.js`, `privacy.test.js`, `claim.test.js`, `payment-flow.test.js`, `admin.test.js`, `mathParser.test.js`.
+- **Frontend (78 Tests across 24 Test Suites)**:
+  1. `guestRouteComponent.test.js`: Flash-free guest route redirection and auth loading skeleton.
+  2. `inviteFlow.test.js`: Preview rendering, safe URL redirect validation, public route classification.
+  3. `viewAndReset.test.js`: Error boundary fallbacks, integer paise currency formatting, safe date formatting.
+  4. `stabilityAndOverlays.test.js`: Overlay manager scroll locking, deploy chunk reload loop guard, 15s timeout and cold start tracking.
 
 ---
 

@@ -12,7 +12,7 @@ import {
   payments,
   recoveryCodes,
 } from '../models/index.js';
-import { COOKIE_NAME } from '../middleware/authMiddleware.js';
+import { COOKIE_NAME, getAuthCookieOptions, getClearCookieOptions } from '../middleware/authMiddleware.js';
 import { calculateUserStats } from '../services/balanceService.js';
 import { recordAuditLog } from '../services/auditService.js';
 import { checkAndConsumeRateLimit } from '../services/rateLimitService.js';
@@ -27,13 +27,7 @@ function generateToken(userId, tokenVersion = 0) {
 }
 
 function setAuthCookie(res, token) {
-  res.cookie(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: env.NODE_ENV === 'production',
-    sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
+  res.cookie(COOKIE_NAME, token, getAuthCookieOptions());
 }
 
 /**
@@ -342,12 +336,7 @@ export async function signOutAll(req, res, next) {
       })
       .where(eq(users.id, userId));
 
-    res.clearCookie(COOKIE_NAME, {
-      httpOnly: true,
-      secure: env.NODE_ENV === 'production',
-      sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
-      path: '/',
-    });
+    res.clearCookie(COOKIE_NAME, getClearCookieOptions());
 
     await recordAuditLog({
       actor: { id: userId, role: req.user.role, name: req.user.name },
