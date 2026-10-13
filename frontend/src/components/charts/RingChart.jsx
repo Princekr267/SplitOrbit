@@ -80,6 +80,20 @@ export function RingChart({
     }
   };
 
+  // Primary progress metric (e.g. paid, collected)
+  const primarySegment =
+    segments.find((s) => ['paid', 'collected', 'settled'].includes(s.key)) ||
+    segments[0];
+  const primaryValue = Number(primarySegment?.value) || 0;
+  const primaryPercent =
+    computedTotal > 0 ? Math.round((primaryValue / computedTotal) * 100) : 0;
+
+  // Pending approval metric if present
+  const pendingSegment = segments.find((s) => s.key === 'pending');
+  const pendingValue = Number(pendingSegment?.value) || 0;
+  const pendingPercent =
+    computedTotal > 0 ? Math.round((pendingValue / computedTotal) * 100) : 0;
+
   return (
     <div
       role="img"
@@ -87,11 +101,14 @@ export function RingChart({
       className="relative flex items-center justify-center select-none"
       style={{ width: `${size}px`, height: `${size}px` }}
     >
-      <svg
+      <m.svg
         width={size}
         height={size}
         viewBox={`0 0 ${size} ${size}`}
         className="transform -rotate-90 overflow-visible"
+        initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, scale: 0.94 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, ease: easings.premium }}
       >
         <ChartHatchPattern id="ring-hatch-pending" />
 
@@ -108,12 +125,10 @@ export function RingChart({
 
         {/* Dynamic Segments */}
         {segmentArcs.map((seg) => {
-          const strokeColor = seg.hatch
-            ? 'url(#ring-hatch-pending)'
-            : seg.color || 'var(--chart-primary)';
+          const strokeColor = seg.color || (seg.key === 'pending' ? 'var(--chart-pending)' : 'var(--chart-primary)');
 
           return (
-            <m.circle
+            <circle
               key={seg.key || seg.label}
               cx={size / 2}
               cy={size / 2}
@@ -127,35 +142,21 @@ export function RingChart({
               tabIndex={0}
               role="button"
               aria-label={`${seg.label}: ${formatFullINR(seg.value, true)}`}
-              initial={
-                prefersReducedMotion
-                  ? { opacity: 0 }
-                  : { pathLength: 0, opacity: 0 }
-              }
-              whileInView={
-                prefersReducedMotion
-                  ? { opacity: 1, transition: { duration: 0.2 } }
-                  : {
-                      pathLength: 1,
-                      opacity: 1,
-                      transition: {
-                        duration: 0.9,
-                        delay: seg.index * 0.08,
-                        ease: easings.premium,
-                      },
-                    }
-              }
-              viewport={{ once: true, margin: '-10%' }}
+              style={{
+                transition: prefersReducedMotion
+                  ? 'none'
+                  : 'stroke-dashoffset 0.6s cubic-bezier(0.16, 1, 0.3, 1), stroke-width 0.2s ease',
+              }}
+              className="cursor-pointer transition-all duration-150 focus:outline-none focus:stroke-text"
               onPointerEnter={(e) => handlePointerEnter(seg, e)}
               onPointerLeave={() => setActiveSegment(null)}
               onFocus={(e) => handlePointerEnter(seg, e)}
               onBlur={() => setActiveSegment(null)}
               onKeyDown={(e) => handleKeyDown(e, seg.index)}
-              className="cursor-pointer transition-all duration-150 focus:outline-none focus:stroke-text"
             />
           );
         })}
-      </svg>
+      </m.svg>
 
       {/* Center Display Slot */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
@@ -164,17 +165,17 @@ export function RingChart({
         ) : (
           <div className="flex flex-col items-center">
             <span className="text-2xl sm:text-3xl font-extrabold text-text tracking-tight font-mono">
-              <AnimatedPercent
-                value={
-                  computedTotal > 0 && segmentArcs[0]
-                    ? Math.round(segmentArcs[0].fraction * 100)
-                    : 0
-                }
-              />
+              <AnimatedPercent value={primaryPercent} />
             </span>
-            <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mt-0.5">
-              {segments[0]?.label || 'Collected'}
+            <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mt-0.5 max-w-[130px] truncate">
+              {primarySegment?.label || 'Collected'}
             </span>
+            {pendingPercent > 0 && (
+              <span className="text-[10px] font-medium text-amber-500 dark:text-amber-400 mt-1 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                +{pendingPercent}% pending
+              </span>
+            )}
           </div>
         )}
       </div>

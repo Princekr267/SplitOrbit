@@ -38,7 +38,7 @@ export function FriendStatementCharts({
   const series = analytics?.series || [];
   const pendingMarkers = analytics?.pendingMarkers || [];
 
-  const ringTotal = totals.share > 0 ? totals.share : totals.paid + totals.pending + totals.left;
+  const ringTotal = totals.share > 0 ? totals.share : Math.max(1, totals.paid + totals.pending + totals.left);
 
   const ringSegments = [
     {
@@ -46,19 +46,6 @@ export function FriendStatementCharts({
       label: 'Paid & Approved',
       value: totals.paid,
       color: 'var(--chart-owed)',
-    },
-    {
-      key: 'pending',
-      label: 'Pending Approval (not counted yet)',
-      value: totals.pending,
-      color: 'var(--chart-pending)',
-      hatch: true,
-    },
-    {
-      key: 'left',
-      label: 'Remaining Left to Pay',
-      value: totals.left,
-      color: 'var(--chart-track)',
     },
   ];
 
@@ -87,7 +74,7 @@ export function FriendStatementCharts({
           legend={
             pendingMarkers.length > 0 && (
               <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
-                <span className="w-2.5 h-2.5 rounded-full border-2 border-warning bg-surface inline-block" />
+                <span className="w-2.5 h-2.5 rounded-full border-2 border-warning bg-surface inline-block shrink-0" />
                 <span>Pending payment marker</span>
               </div>
             )
@@ -116,12 +103,18 @@ export function FriendStatementCharts({
           tableData={{
             caption: 'Repayment breakdown',
             headers: ['Category', 'Amount'],
-            rows: ringSegments.map((s) => [s.label, formatFullINR(s.value, true)]),
+            rows: [
+              ['Paid & Approved', formatFullINR(totals.paid, true)],
+              totals.pending > 0
+                ? ['Pending Approval', formatFullINR(totals.pending, true)]
+                : null,
+              ['Remaining Left to Pay', formatFullINR(totals.left, true)],
+            ].filter(Boolean),
           }}
           legend={
-            <div className="flex flex-col gap-1.5 text-[11px]">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px]">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-success flex-shrink-0" />
+                <span className="w-2.5 h-2.5 rounded-full bg-success shrink-0" />
                 <span className="text-text-muted">Paid:</span>
                 <span className="font-mono font-medium text-text">
                   {formatCompactINR(totals.paid, true)}
@@ -130,13 +123,8 @@ export function FriendStatementCharts({
 
               {totals.pending > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-warning"
-                    style={{
-                      background: 'repeating-linear-gradient(45deg, var(--chart-pending), var(--chart-pending) 2px, transparent 2px, transparent 4px)',
-                    }}
-                  />
-                  <span className="text-text-muted">Pending approval (not counted yet):</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-warning shrink-0" />
+                  <span className="text-text-muted">Pending approval:</span>
                   <span className="font-mono font-medium text-text">
                     {formatCompactINR(totals.pending, true)}
                   </span>
@@ -144,7 +132,7 @@ export function FriendStatementCharts({
               )}
 
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-700 flex-shrink-0" />
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-600 shrink-0" />
                 <span className="text-text-muted">Left to pay:</span>
                 <span className="font-mono font-medium text-text">
                   {formatCompactINR(totals.left, true)}
@@ -164,12 +152,22 @@ export function FriendStatementCharts({
               </span>
             </div>
           ) : (
-            <RingChart
-              segments={ringSegments}
-              total={ringTotal}
-              size={200}
-              strokeWidth={20}
-            />
+            <div className="flex flex-col items-center justify-center">
+              <RingChart
+                segments={ringSegments}
+                total={ringTotal}
+                size={190}
+                strokeWidth={20}
+              />
+              {totals.pending > 0 && (
+                <div className="mt-2 text-center">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-warning/10 text-warning border border-warning/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-warning" />
+                    {formatFullINR(totals.pending, true)} pending host verification
+                  </span>
+                </div>
+              )}
+            </div>
           )}
         </ChartCard>
       </div>

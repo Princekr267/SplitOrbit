@@ -41,7 +41,7 @@ export function GroupChartsSection({
   const modes = analytics?.modes || { cash: { amount: 0, count: 0 }, online: { amount: 0, count: 0 } };
   const agingBuckets = analytics?.aging?.buckets || [];
 
-  // 1. Ring Segments
+  // 1. Ring Segments (Active filled slices; background track handles remaining)
   const ringSegments = [
     {
       key: 'collected',
@@ -49,19 +49,16 @@ export function GroupChartsSection({
       value: collected.collected,
       color: 'var(--chart-owed)',
     },
-    {
-      key: 'pending',
-      label: 'Pending Approval',
-      value: collected.pending,
-      color: 'var(--chart-pending)',
-      hatch: true,
-    },
-    {
-      key: 'remaining',
-      label: 'Remaining Dues',
-      value: collected.remaining,
-      color: 'var(--chart-track)',
-    },
+    ...(collected.pending > 0
+      ? [
+          {
+            key: 'pending',
+            label: 'Pending Approval',
+            value: collected.pending,
+            color: 'var(--chart-pending)',
+          },
+        ]
+      : []),
   ];
 
   // 2. Mode Segments for Donut
@@ -130,10 +127,16 @@ export function GroupChartsSection({
           tableData={{
             caption: 'Collection progress breakdown',
             headers: ['Category', 'Amount'],
-            rows: ringSegments.map((s) => [s.label, formatFullINR(s.value, true)]),
+            rows: [
+              ['Collected', formatFullINR(collected.collected, true)],
+              collected.pending > 0
+                ? ['Pending Approval', formatFullINR(collected.pending, true)]
+                : null,
+              ['Remaining Dues', formatFullINR(collected.remaining, true)],
+            ].filter(Boolean),
           }}
           legend={
-            <div className="flex flex-col gap-1 text-[11px]">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-success flex-shrink-0" />
                 <span className="text-text-muted">Collected:</span>
@@ -150,6 +153,13 @@ export function GroupChartsSection({
                   </span>
                 </div>
               )}
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-600 flex-shrink-0" />
+                <span className="text-text-muted">Remaining:</span>
+                <span className="font-mono font-medium text-text">
+                  {formatCompactINR(collected.remaining, true)}
+                </span>
+              </div>
             </div>
           }
           className="lg:col-span-1"

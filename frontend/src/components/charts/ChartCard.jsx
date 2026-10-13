@@ -41,10 +41,10 @@ export function ChartCard({
       style={{ minHeight }}
     >
       {/* Header section */}
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0 pr-2">
           {title && (
-            <h3 className="text-sm sm:text-base font-semibold text-text tracking-tight">
+            <h3 className="text-sm sm:text-base font-semibold text-text tracking-tight leading-snug">
               {title}
             </h3>
           )}
@@ -55,9 +55,7 @@ export function ChartCard({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {legend && <div className="hidden sm:flex items-center gap-2">{legend}</div>}
-
+        <div className="flex items-center gap-2 shrink-0">
           {tableData && !loading && !error && !empty && (
             <button
               type="button"
@@ -81,6 +79,13 @@ export function ChartCard({
           )}
         </div>
       </div>
+
+      {/* Dedicated Legend Bar */}
+      {legend && !showTable && !loading && !error && !empty && (
+        <div className="mb-3 pt-2 border-t border-border/40 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-muted">
+          {legend}
+        </div>
+      )}
 
       {/* Main body area */}
       <div className="flex-1 flex flex-col justify-center relative min-h-[220px]">
@@ -169,13 +174,6 @@ export function ChartCard({
           </div>
         )}
       </div>
-
-      {/* Mobile Legend Footer if present */}
-      {legend && !loading && !error && !empty && (
-        <div className="sm:hidden pt-3 border-t border-border/50 flex flex-wrap items-center justify-center gap-2">
-          {legend}
-        </div>
-      )}
     </m.div>
   );
 }
