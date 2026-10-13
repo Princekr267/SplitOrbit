@@ -27,14 +27,18 @@ import BrandedAuthSkeleton from '../components/common/BrandedAuthSkeleton.jsx';
 import { formatINR } from '../utils/currency.js';
 import { formatDate } from '../utils/date.js';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const FriendStatementCharts = React.lazy(() => import('../components/charts/FriendStatementCharts.jsx'));
 
 export default function PublicStatementPage() {
   const { token } = useParams();
+  const { user, bootstrapAuth } = useAuth();
+  const { addToast } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [claimingProfile, setClaimingProfile] = useState(false);
 
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -75,6 +79,27 @@ export default function PublicStatementPage() {
   useEffect(() => {
     fetchStatement();
   }, [fetchStatement]);
+
+  const handleClaimViaViewLink = async () => {
+    try {
+      setClaimingProfile(true);
+      const res = await api.post(`/s/${encodeURIComponent(token)}/claim`);
+      if (res.success) {
+        addToast(
+          res.data?.alreadyClaimed
+            ? 'Profile already linked to your account!'
+            : 'Statement linked to your account successfully! 🎉',
+          'success'
+        );
+        if (bootstrapAuth) await bootstrapAuth();
+        fetchStatement();
+      }
+    } catch (err) {
+      addToast(err.message || 'Failed to link account to this statement', 'error');
+    } finally {
+      setClaimingProfile(false);
+    }
+  };
 
   if (loading) {
     return <BrandedAuthSkeleton message="Loading passbook statement..." />;
@@ -232,21 +257,81 @@ export default function PublicStatementPage() {
         </ErrorBoundary>
 
         {/* Call To Action Banner: Sign up / Claim profile */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-surface-raised to-surface border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-          <div className="space-y-0.5">
-            <span className="text-xs sm:text-sm font-bold text-text block">
-              Want to record a payment or track across trips?
-            </span>
-            <span className="text-[11px] text-text-muted block">
-              Ask your host for an invite link, sign up, and submit payments directly.
-            </span>
+        {data.person?.isLinkedToCurrentUser ? (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-surface-raised to-surface border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+            <div className="space-y-0.5">
+              <span className="text-xs sm:text-sm font-bold text-text flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                Linked to your account (@{user?.username})
+              </span>
+              <span className="text-[11px] text-text-muted block">
+                This statement profile is linked to your SplitOrbit account. View itemized splits and manage payments from your friend dashboard.
+              </span>
+            </div>
+            <Link
+              to={`/friend?groupId=${data.group?.id}&personId=${data.person?.id}`}
+              className="shrink-0"
+            >
+              <Button size="sm" variant="primary" iconRight={<ArrowRight className="w-3.5 h-3.5" />}>
+                Open in Dashboard
+              </Button>
+            </Link>
           </div>
-          <Link to="/register" className="shrink-0">
-            <Button size="sm" variant="primary" iconRight={<ArrowRight className="w-3.5 h-3.5" />}>
-              Sign Up & Claim
-            </Button>
-          </Link>
-        </div>
+        ) : !data.person?.isClaimed ? (
+          user ? (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-brand-500/10 via-surface-raised to-surface border border-brand-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <div className="space-y-0.5">
+                <span className="text-xs sm:text-sm font-bold text-text block">
+                  Link this statement to your account
+                </span>
+                <span className="text-[11px] text-text-muted block">
+                  Signed in as <strong className="text-text font-semibold">@{user.username}</strong>. Connect this profile to submit repayments and track pooled balances.
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={handleClaimViaViewLink}
+                disabled={claimingProfile}
+                iconRight={<ArrowRight className="w-3.5 h-3.5" />}
+                className="shrink-0"
+              >
+                {claimingProfile ? 'Linking...' : `Link to @${user.username}`}
+              </Button>
+            </div>
+          ) : (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-surface-raised to-surface border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <div className="space-y-0.5">
+                <span className="text-xs sm:text-sm font-bold text-text block">
+                  Want to record repayments and track across groups?
+                </span>
+                <span className="text-[11px] text-text-muted block">
+                  Sign up or log in to link this statement to your SplitOrbit account.
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  to={`/login?next=${encodeURIComponent(`/s/${token}`)}`}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-surface hover:bg-surface-elevated text-text transition"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to={`/register?shareToken=${encodeURIComponent(token)}&next=${encodeURIComponent(`/s/${token}`)}`}
+                >
+                  <Button size="sm" variant="primary" iconRight={<ArrowRight className="w-3.5 h-3.5" />}>
+                    Sign Up & Link Account
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          )
+        ) : (
+          <div className="p-3.5 rounded-xl bg-surface-raised border border-border text-xs text-text-muted flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>This statement profile is claimed by a verified member account.</span>
+          </div>
+        )}
 
         {/* Passbook Ledger */}
         <section className="space-y-3">

@@ -52,7 +52,9 @@ export function clearStoredToken() {
 let activeRequests = 0;
 let serverWakingTimer = null;
 let serverIsWaking = false;
-let serverHasResponded = false;
+let serverHasResponded =
+  typeof window !== 'undefined' &&
+  sessionStorage.getItem('splitorbit_server_warm') === 'true';
 const serverWakingListeners = new Set();
 
 function updateServerWaking(isWaking) {
@@ -105,6 +107,11 @@ api.interceptors.request.use((config) => {
 function handleRequestFinished(hasResponse = false) {
   if (hasResponse) {
     serverHasResponded = true;
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('splitorbit_server_warm', 'true');
+      } catch {}
+    }
   }
   activeRequests = Math.max(0, activeRequests - 1);
   if (activeRequests === 0 || serverHasResponded) {

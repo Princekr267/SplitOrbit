@@ -77,7 +77,7 @@ export default function ProfilePage() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/me');
+      const res = await api.get('/me?includeStats=true');
       if (res.success && res.data) {
         setProfileData(res.data);
         const u = res.data.user;

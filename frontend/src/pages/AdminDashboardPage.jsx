@@ -268,15 +268,12 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
-  // Polling: auto-refresh reset requests queue every 60s and on window focus
+  // Polling: auto-refresh reset requests queue every 60s
   useEffect(() => {
     fetchResetRequests();
     const interval = setInterval(fetchResetRequests, 60000);
-    const handleFocus = () => fetchResetRequests();
-    window.addEventListener('focus', handleFocus);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
     };
   }, [fetchResetRequests]);
 

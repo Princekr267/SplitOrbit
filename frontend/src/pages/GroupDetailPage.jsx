@@ -172,23 +172,6 @@ export default function GroupDetailPage() {
     fetchData();
   }, [fetchData]);
 
-  // Background refetch on window focus and visibility foreground restore
-  useEffect(() => {
-    const handleFocus = () => {
-      if (isHost || user?.role === 'admin') {
-        fetchAnalytics();
-      }
-    };
-    const handleVisibilityRefresh = () => {
-      fetchData();
-    };
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('splitorbit:visibility-refresh', handleVisibilityRefresh);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('splitorbit:visibility-refresh', handleVisibilityRefresh);
-    };
-  }, [isHost, user, fetchAnalytics, fetchData]);
 
   const handleConfirmSettle = async () => {
     if (!summary?.isSettledReady) {

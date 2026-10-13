@@ -126,9 +126,6 @@ export default function FriendDashboardPage() {
 
   useEffect(() => {
     fetchProfiles();
-    const handleVisRefresh = () => fetchProfiles(true);
-    window.addEventListener('splitorbit:visibility-refresh', handleVisRefresh);
-    return () => window.removeEventListener('splitorbit:visibility-refresh', handleVisRefresh);
   }, [fetchProfiles]);
 
   const loadStatementForProfile = async (profile) => {
@@ -180,7 +177,7 @@ export default function FriendDashboardPage() {
     }
   };
 
-  // Auto-expand statement if targeted via URL query params (e.g. redirected from claim)
+  // Auto-expand statement and scroll into view if targeted via URL query params (e.g. redirected from claim)
   useEffect(() => {
     if (profiles.length > 0 && (targetPersonId || targetGroupId)) {
       const target = profiles.find(
@@ -188,8 +185,18 @@ export default function FriendDashboardPage() {
           (targetPersonId && p.person?.id === targetPersonId) ||
           (targetGroupId && p.group?.id === targetGroupId)
       );
-      if (target && expandedProfileId !== target.person?.id) {
-        loadStatementForProfile(target);
+      if (target) {
+        if (expandedProfileId !== target.person?.id) {
+          loadStatementForProfile(target);
+        }
+        setTimeout(() => {
+          const el = document.getElementById(`profile-card-${target.person?.id}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-2', 'ring-brand-500');
+            setTimeout(() => el.classList.remove('ring-2', 'ring-brand-500'), 2500);
+          }
+        }, 350);
       }
     }
   }, [profiles, targetGroupId, targetPersonId]);
@@ -434,10 +441,11 @@ export default function FriendDashboardPage() {
               return (
                 <m.div
                   key={person.id}
+                  id={`profile-card-${person.id}`}
                   layout="position"
                   transition={springs.smooth}
                   style={{ borderRadius: 16 }}
-                  className="bg-surface rounded-2xl border border-border shadow-xs overflow-hidden"
+                  className="bg-surface rounded-2xl border border-border shadow-xs overflow-hidden transition-all duration-300"
                 >
                   {/* Card Header & Summary */}
                   <div className="p-5 sm:p-6 space-y-4">

@@ -1,6 +1,8 @@
-import { eq, and, or, inArray, desc, asc } from 'drizzle-orm';
+import { eq, and, or, inArray, desc, asc, sql } from 'drizzle-orm';
 import { db } from '../config/db.js';
-import { expenses, expenseSplits, payments, people } from '../models/index.js';
+import { expenses, expenseSplits, payments, people, groups } from '../models/index.js';
+import { hashToken } from '../services/tokenService.js';
+import { recordAuditLog } from '../services/auditService.js';
 
 export async function getPublicStatement(req, res, next) {
   try {
@@ -167,10 +169,13 @@ export async function getPublicStatement(req, res, next) {
       success: true,
       data: {
         person: {
+          id: person.id,
           name: person.name,
           isClaimed: !!person.linkedUserId,
+          isLinkedToCurrentUser: req.user ? person.linkedUserId === req.user.id : false,
         },
         group: {
+          id: group.id,
           name: group.name,
           status: group.status,
         },
@@ -186,6 +191,154 @@ export async function getPublicStatement(req, res, next) {
       },
     });
   } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Claim a member profile using a private view link (Level 1 shareToken).
+ * POST /api/s/:token/claim
+ */
+export async function claimShareLink(req, res, next) {
+  try {
+    const userId = req.user.id;
+    const { token } = req.params;
+
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_TOKEN', message: 'Invalid statement token.' },
+      });
+    }
+
+    const tokenHash = hashToken(token);
+
+    const result = await db.transaction(async (tx) => {
+      const [person] = await tx
+        .select()
+        .from(people)
+        .where(
+          and(
+            eq(people.shareTokenHash, tokenHash),
+            eq(people.shareEnabled, true),
+            eq(people.isDeleted, false)
+          )
+        );
+
+      if (!person) {
+        throw {
+          status: 404,
+          code: 'LINK_INVALID',
+          message: 'This statement link is invalid or has been disabled.',
+        };
+      }
+
+      const [group] = await tx
+        .select()
+        .from(groups)
+        .where(eq(groups.id, person.groupId));
+
+      if (!group || group.isDeleted) {
+        throw {
+          status: 404,
+          code: 'GROUP_NOT_FOUND',
+          message: 'The associated group no longer exists.',
+        };
+      }
+
+      if (person.linkedUserId) {
+        if (person.linkedUserId === userId) {
+          return {
+            alreadyClaimed: true,
+            groupId: person.groupId,
+            personId: person.id,
+            groupName: group.name,
+          };
+        }
+        throw {
+          status: 409,
+          code: 'ALREADY_CLAIMED',
+          message: 'This member profile has already been claimed by another user account.',
+        };
+      }
+
+      if (person.isHost || group.createdBy === userId) {
+        throw {
+          status: 409,
+          code: 'HOST_CANNOT_CLAIM',
+          message: 'Group hosts cannot claim a member profile.',
+        };
+      }
+
+      const [alreadyInGroup] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(
+          and(
+            eq(people.groupId, person.groupId),
+            eq(people.linkedUserId, userId),
+            eq(people.isDeleted, false)
+          )
+        );
+
+      if (alreadyInGroup) {
+        throw {
+          status: 409,
+          code: 'ALREADY_IN_GROUP',
+          message: 'Your account is already linked to a profile in this group.',
+        };
+      }
+
+      const [claimedPerson] = await tx
+        .update(people)
+        .set({
+          linkedUserId: userId,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(people.id, person.id),
+            sql`${people.linkedUserId} IS NULL`
+          )
+        )
+        .returning();
+
+      if (!claimedPerson) {
+        throw {
+          status: 409,
+          code: 'ALREADY_CLAIMED',
+          message: 'This profile was already claimed.',
+        };
+      }
+
+      await recordAuditLog({
+        actor: req.user,
+        action: 'share.claim',
+        entityType: 'Person',
+        entityId: claimedPerson.id,
+        groupId: claimedPerson.groupId,
+        after: { linkedUserId: userId },
+      });
+
+      return {
+        alreadyClaimed: false,
+        groupId: group.id,
+        personId: claimedPerson.id,
+        groupName: group.name,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({
+        success: false,
+        error: { code: error.code, message: error.message },
+      });
+    }
     next(error);
   }
 }

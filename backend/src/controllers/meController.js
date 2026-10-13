@@ -38,11 +38,42 @@ export async function getProfile(req, res, next) {
   try {
     const userId = req.user.id;
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId));
+    const skipStats = req.query.skipStats === 'true' || req.query.fast === 'true';
 
+    // Run user query, recovery code count, linked groups, and user stats concurrently
+    const [userRows, recCodeRows, linkedGroups, stats] = await Promise.all([
+      db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId)),
+      db
+        .select({ count: sql`count(*)::int` })
+        .from(recoveryCodes)
+        .where(and(eq(recoveryCodes.userId, userId), sql`${recoveryCodes.usedAt} IS NULL`)),
+      db
+        .select({
+          personId: people.id,
+          groupId: groups.id,
+          groupName: groups.name,
+          groupStatus: groups.status,
+          isHost: people.isHost,
+          canViewAllBills: people.canViewAllBills,
+        })
+        .from(people)
+        .innerJoin(groups, eq(people.groupId, groups.id))
+        .where(and(eq(people.linkedUserId, userId), eq(people.isDeleted, false), eq(groups.isDeleted, false))),
+      skipStats
+        ? Promise.resolve({
+            groupsHosted: 0,
+            linkedProfiles: 0,
+            totalOwedToMe: 0,
+            totalIOwe: 0,
+            pendingApprovals: 0,
+          })
+        : calculateUserStats(userId),
+    ]);
+
+    const user = userRows[0];
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -50,28 +81,7 @@ export async function getProfile(req, res, next) {
       });
     }
 
-    // Remaining unused recovery codes count
-    const [recCodes] = await db
-      .select({ count: sql`count(*)::int` })
-      .from(recoveryCodes)
-      .where(and(eq(recoveryCodes.userId, userId), sql`${recoveryCodes.usedAt} IS NULL`));
-
-    // Live balance and ledger stats from balanceService
-    const stats = await calculateUserStats(userId);
-
-    // List of groups linked for friends view
-    const linkedGroups = await db
-      .select({
-        personId: people.id,
-        groupId: groups.id,
-        groupName: groups.name,
-        groupStatus: groups.status,
-        isHost: people.isHost,
-        canViewAllBills: people.canViewAllBills,
-      })
-      .from(people)
-      .innerJoin(groups, eq(people.groupId, groups.id))
-      .where(and(eq(people.linkedUserId, userId), eq(people.isDeleted, false), eq(groups.isDeleted, false)));
+    const recCodes = recCodeRows[0];
 
     res.json({
       success: true,

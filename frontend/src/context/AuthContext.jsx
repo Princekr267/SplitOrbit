@@ -14,7 +14,7 @@ export function AuthProvider({ children }) {
    */
   const bootstrapAuth = useCallback(async (retryCount = 0) => {
     try {
-      const res = await api.get('/me');
+      const res = await api.get('/me?skipStats=true');
       if (res.success && res.data?.user) {
         setUser(res.data.user);
         setStatus('authenticated');
@@ -67,7 +67,7 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // Handle bfcache restores (pageshow with persisted=true) and foreground focus (visibilitychange)
+  // Handle bfcache restores (pageshow with persisted=true)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -78,24 +78,11 @@ export function AuthProvider({ children }) {
       }
     };
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // Tab foregrounded: re-validate if authenticated or in error
-        if (status === 'authenticated' || status === 'error') {
-          bootstrapAuth();
-        }
-        window.dispatchEvent(new CustomEvent('splitorbit:visibility-refresh'));
-      }
-    };
-
     window.addEventListener('pageshow', handlePageShow);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
       window.removeEventListener('pageshow', handlePageShow);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [bootstrapAuth, status]);
+  }, [bootstrapAuth]);
 
   const login = async (username, password) => {
     const cleanUsername = username ? username.trim().toLowerCase() : '';
@@ -120,7 +107,7 @@ export function AuthProvider({ children }) {
     return null;
   };
 
-  const register = async ({ name, username, password, email, phone, inviteCode }) => {
+  const register = async ({ name, username, password, email, phone, inviteCode, shareToken }) => {
     const cleanUsername = username ? username.trim().toLowerCase() : '';
     const res = await api.post('/auth/register', {
       name,
@@ -129,6 +116,7 @@ export function AuthProvider({ children }) {
       email: email ? email.trim() : undefined,
       phone: phone ? phone.trim() : undefined,
       inviteCode: inviteCode ? inviteCode.trim() : undefined,
+      shareToken: shareToken ? shareToken.trim() : undefined,
     });
 
     if (res.success) {

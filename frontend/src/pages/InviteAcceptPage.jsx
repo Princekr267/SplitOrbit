@@ -135,29 +135,12 @@ export default function InviteAcceptPage() {
     }
   };
 
-  // 3. Auto-claim when authenticated user visits or returns from login
-  useEffect(() => {
-    if (
-      authStatus === 'authenticated' &&
-      user &&
-      inviteData?.valid &&
-      !loading &&
-      !claimedSuccess &&
-      !claiming &&
-      !invalidReason &&
-      !hasAutoClaimedRef.current
-    ) {
-      hasAutoClaimedRef.current = true;
-      handleClaim(true);
-    }
-  }, [authStatus, user, inviteData, loading, claimedSuccess, claiming, invalidReason]);
-
-  // Switch account handler
+  // Switch account handler: sign out and navigate to login with invite preserved
   const handleSwitchAccount = async () => {
     try {
       await logout();
-      hasAutoClaimedRef.current = false;
       addToast('Signed out. Please sign in with your other account.', 'info');
+      navigate(`/login?next=${encodeURIComponent(`/invite/${code}`)}`);
     } catch {
       // ignore
     }
@@ -322,14 +305,14 @@ export default function InviteAcceptPage() {
               }
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-brand-500 hover:bg-brand-400 text-slate-950 transition shadow-lg shadow-brand-500/20"
             >
-              <span>Open My Statement</span>
+              <span>View My Itemized Statement</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
             <Link
-              to="/friend"
+              to="/dashboard"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-surface-muted hover:bg-surface-elevated text-text border border-border transition"
             >
-              Friend Dashboard
+              Go to Home Dashboard
             </Link>
           </div>
         </div>
@@ -435,7 +418,7 @@ export default function InviteAcceptPage() {
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Join {inviteData?.groupName}</span>
+                    <span>Claim Profile & Link to @{user?.username}</span>
                   </>
                 )}
               </button>

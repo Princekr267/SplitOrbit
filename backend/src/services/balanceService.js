@@ -57,15 +57,42 @@ export async function calculateGroupBalances(groupId, tx = db) {
     });
   }
 
-  // 2. Aggregate expenses paid by each person
-  const paidExpensesAgg = await tx
-    .select({
-      personId: expenses.paidByPersonId,
-      totalPaid: sql`COALESCE(SUM(${expenses.totalAmount}), 0)::text`.mapWith(Number),
-    })
-    .from(expenses)
-    .where(and(eq(expenses.groupId, groupId), eq(expenses.isDeleted, false)))
-    .groupBy(expenses.paidByPersonId);
+  // 2, 3, 4: Aggregate expenses paid, splits, and payments concurrently
+  const [paidExpensesAgg, splitsAgg, paymentsAgg] = await Promise.all([
+    tx
+      .select({
+        personId: expenses.paidByPersonId,
+        totalPaid: sql`COALESCE(SUM(${expenses.totalAmount}), 0)::text`.mapWith(Number),
+      })
+      .from(expenses)
+      .where(and(eq(expenses.groupId, groupId), eq(expenses.isDeleted, false)))
+      .groupBy(expenses.paidByPersonId),
+    tx
+      .select({
+        personId: expenseSplits.personId,
+        totalShare: sql`COALESCE(SUM(${expenseSplits.amount}), 0)::text`.mapWith(Number),
+      })
+      .from(expenseSplits)
+      .innerJoin(
+        expenses,
+        and(
+          eq(expenseSplits.expenseId, expenses.id),
+          eq(expenses.groupId, groupId),
+          eq(expenses.isDeleted, false)
+        )
+      )
+      .groupBy(expenseSplits.personId),
+    tx
+      .select({
+        fromPersonId: payments.fromPersonId,
+        toPersonId: payments.toPersonId,
+        status: payments.status,
+        total: sql`COALESCE(SUM(${payments.amount}), 0)::text`.mapWith(Number),
+      })
+      .from(payments)
+      .where(and(eq(payments.groupId, groupId), eq(payments.isDeleted, false)))
+      .groupBy(payments.fromPersonId, payments.toPersonId, payments.status),
+  ]);
 
   for (const row of paidExpensesAgg) {
     if (personMap.has(row.personId)) {
@@ -73,41 +100,11 @@ export async function calculateGroupBalances(groupId, tx = db) {
     }
   }
 
-  // 3. Aggregate expense splits per person
-  // (Filter only non-deleted parent expenses)
-  const splitsAgg = await tx
-    .select({
-      personId: expenseSplits.personId,
-      totalShare: sql`COALESCE(SUM(${expenseSplits.amount}), 0)::text`.mapWith(Number),
-    })
-    .from(expenseSplits)
-    .innerJoin(
-      expenses,
-      and(
-        eq(expenseSplits.expenseId, expenses.id),
-        eq(expenses.groupId, groupId),
-        eq(expenses.isDeleted, false)
-      )
-    )
-    .groupBy(expenseSplits.personId);
-
   for (const row of splitsAgg) {
     if (personMap.has(row.personId)) {
       personMap.get(row.personId).shareSplitsTotal = row.totalShare;
     }
   }
-
-  // 4. Aggregate payments by status and direction
-  const paymentsAgg = await tx
-    .select({
-      fromPersonId: payments.fromPersonId,
-      toPersonId: payments.toPersonId,
-      status: payments.status,
-      total: sql`COALESCE(SUM(${payments.amount}), 0)::text`.mapWith(Number),
-    })
-    .from(payments)
-    .where(and(eq(payments.groupId, groupId), eq(payments.isDeleted, false)))
-    .groupBy(payments.fromPersonId, payments.toPersonId, payments.status);
 
   for (const row of paymentsAgg) {
     const fromP = personMap.get(row.fromPersonId);
@@ -171,47 +168,57 @@ export async function calculateGroupBalances(groupId, tx = db) {
  * @param {object} [tx=db]
  */
 export async function calculateUserStats(userId, tx = db) {
-  // 1. Count hosted groups
-  const [hosted] = await tx
-    .select({ count: sql`count(*)::int` })
-    .from(groups)
-    .where(and(eq(groups.createdBy, userId), eq(groups.isDeleted, false)));
-
-  // 2. Linked friend profiles (non-host)
-  const linkedPeople = await tx
-    .select({
-      id: people.id,
-      groupId: people.groupId,
-      isHost: people.isHost,
-    })
-    .from(people)
-    .innerJoin(groups, eq(people.groupId, groups.id))
-    .where(
-      and(
-        eq(people.linkedUserId, userId),
-        eq(people.isHost, false),
-        eq(people.isDeleted, false),
-        eq(groups.isDeleted, false)
-      )
-    );
-
-  // 3. Hosted people (host person rows in groups hosted by user)
-  const hostedPeople = await tx
-    .select({
-      id: people.id,
-      groupId: people.groupId,
-      isHost: people.isHost,
-    })
-    .from(people)
-    .innerJoin(groups, eq(people.groupId, groups.id))
-    .where(
-      and(
-        eq(groups.createdBy, userId),
-        eq(people.isHost, true),
-        eq(people.isDeleted, false),
-        eq(groups.isDeleted, false)
-      )
-    );
+  // Query hosted groups, linked friend profiles, hosted host-profiles, and pending payments concurrently
+  const [[hosted], linkedPeople, hostedPeople, [hostedPending]] = await Promise.all([
+    tx
+      .select({ count: sql`count(*)::int` })
+      .from(groups)
+      .where(and(eq(groups.createdBy, userId), eq(groups.isDeleted, false))),
+    tx
+      .select({
+        id: people.id,
+        groupId: people.groupId,
+        isHost: people.isHost,
+      })
+      .from(people)
+      .innerJoin(groups, eq(people.groupId, groups.id))
+      .where(
+        and(
+          eq(people.linkedUserId, userId),
+          eq(people.isHost, false),
+          eq(people.isDeleted, false),
+          eq(groups.isDeleted, false)
+        )
+      ),
+    tx
+      .select({
+        id: people.id,
+        groupId: people.groupId,
+        isHost: people.isHost,
+      })
+      .from(people)
+      .innerJoin(groups, eq(people.groupId, groups.id))
+      .where(
+        and(
+          eq(groups.createdBy, userId),
+          eq(people.isHost, true),
+          eq(people.isDeleted, false),
+          eq(groups.isDeleted, false)
+        )
+      ),
+    tx
+      .select({ count: sql`count(*)::int` })
+      .from(payments)
+      .innerJoin(groups, eq(payments.groupId, groups.id))
+      .where(
+        and(
+          eq(groups.createdBy, userId),
+          eq(payments.status, 'pending'),
+          eq(payments.isDeleted, false),
+          eq(groups.isDeleted, false)
+        )
+      ),
+  ]);
 
   const allUserPeople = [...hostedPeople, ...linkedPeople];
   const uniqueGroupIds = [...new Set(allUserPeople.map((p) => p.groupId))];
@@ -219,8 +226,13 @@ export async function calculateUserStats(userId, tx = db) {
   let totalOwedToMe = 0;
   let totalIOwe = 0;
 
-  for (const gid of uniqueGroupIds) {
-    const balances = await calculateGroupBalances(gid, tx);
+  const groupBalancesList = await Promise.all(
+    uniqueGroupIds.map((gid) => calculateGroupBalances(gid, tx))
+  );
+
+  for (let i = 0; i < uniqueGroupIds.length; i++) {
+    const gid = uniqueGroupIds[i];
+    const balances = groupBalancesList[i];
     const myPersonIds = new Set(allUserPeople.filter((p) => p.groupId === gid).map((p) => p.id));
 
     for (const p of balances.people) {
@@ -230,20 +242,6 @@ export async function calculateUserStats(userId, tx = db) {
       }
     }
   }
-
-  // Pending payments awaiting approval in groups hosted by this user
-  const [hostedPending] = await tx
-    .select({ count: sql`count(*)::int` })
-    .from(payments)
-    .innerJoin(groups, eq(payments.groupId, groups.id))
-    .where(
-      and(
-        eq(groups.createdBy, userId),
-        eq(payments.status, 'pending'),
-        eq(payments.isDeleted, false),
-        eq(groups.isDeleted, false)
-      )
-    );
 
   return {
     groupsHosted: hosted?.count || 0,

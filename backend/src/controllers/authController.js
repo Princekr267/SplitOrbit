@@ -99,8 +99,9 @@ export async function register(req, res, next) {
       });
     }
 
-    const { name, username, password, email, phone, inviteCode } = req.body;
+    const { name, username, password, email, phone, inviteCode, shareToken } = req.body;
     const cleanInviteCode = typeof inviteCode === 'string' ? inviteCode.trim() : '';
+    const cleanShareToken = typeof shareToken === 'string' ? shareToken.trim() : '';
 
     let invitePerson = null;
     let inviteGroup = null;
@@ -172,6 +173,38 @@ export async function register(req, res, next) {
 
       invitePerson = foundPerson;
       inviteGroup = foundGroup;
+    } else if (cleanShareToken) {
+      const shareHash = hashToken(cleanShareToken);
+      const [foundPerson] = await db
+        .select({
+          id: people.id,
+          groupId: people.groupId,
+          name: people.name,
+          isHost: people.isHost,
+          linkedUserId: people.linkedUserId,
+          shareEnabled: people.shareEnabled,
+          isDeleted: people.isDeleted,
+        })
+        .from(people)
+        .where(
+          and(
+            eq(people.shareTokenHash, shareHash),
+            eq(people.shareEnabled, true),
+            eq(people.isDeleted, false)
+          )
+        );
+
+      if (foundPerson && !foundPerson.linkedUserId && !foundPerson.isHost) {
+        const [foundGroup] = await db
+          .select({ id: groups.id, name: groups.name, isDeleted: groups.isDeleted })
+          .from(groups)
+          .where(eq(groups.id, foundPerson.groupId));
+
+        if (foundGroup && !foundGroup.isDeleted) {
+          invitePerson = foundPerson;
+          inviteGroup = foundGroup;
+        }
+      }
     }
 
     const allowRegistration = await getSetting('allowRegistration');

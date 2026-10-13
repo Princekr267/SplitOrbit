@@ -83,8 +83,17 @@ export default function RegisterPage() {
     }
   }
 
+  let initialShareToken = searchParams.get('shareToken') || searchParams.get('token') || '';
+  if (!initialShareToken && rawNext && rawNext.includes('/s/')) {
+    const match = rawNext.match(/\/s\/([^/?#]+)/i);
+    if (match && match[1]) {
+      initialShareToken = match[1];
+    }
+  }
+
   const [allowRegistration, setAllowRegistration] = useState(true);
   const [inviteCode, setInviteCode] = useState(initialInvite);
+  const [shareToken, setShareToken] = useState(initialShareToken);
   const [invitePreview, setInvitePreview] = useState(null);
   const [claimedGroupInfo, setClaimedGroupInfo] = useState(null);
 
@@ -212,6 +221,7 @@ export default function RegisterPage() {
         email: email || undefined,
         phone: phone || undefined,
         inviteCode: inviteCode || undefined,
+        shareToken: shareToken || undefined,
       });
 
       if (result.claimed) {
