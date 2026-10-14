@@ -13,7 +13,6 @@ import { m, AnimatePresence } from 'motion/react';
 import { springs, durations, easings } from '../../motion/tokens.js';
 import { safeEvaluate, calculateSplitBreakdown } from '../../utils/mathParser.js';
 import { useToast } from '../../context/ToastContext.jsx';
-import { lockBodyScroll, unlockBodyScroll } from '../../utils/overlayManager.js';
 
 export default function Calculator() {
   const [isOpen, setIsOpen] = useState(false);
@@ -35,6 +34,7 @@ export default function Calculator() {
   const panelRef = useRef(null);
   const toggleBtnRef = useRef(null);
   const lastFocusedInputRef = useRef(null);
+  const prevBodyOverflowRef = useRef('');
 
   // 1. Track last focused amount input at document level
   useEffect(() => {
@@ -65,18 +65,21 @@ export default function Calculator() {
         lastFocusedInputRef.current = null;
         setHasTargetInput(false);
       }
-      // Lock scroll on mobile screens when panel is open
+      // Lock scroll on mobile screens when panel is open.
+      // NOTE: intentionally not using lockBodyScroll() here — it sets
+      // data-modal-open on <body>, which this component's own
+      // MutationObserver reads as "another modal opened" and would
+      // instantly close the calculator on mobile.
       if (typeof window !== 'undefined' && window.innerWidth < 640) {
-        lockBodyScroll();
+        prevBodyOverflowRef.current = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
       }
-    } else {
-      if (typeof window !== 'undefined' && window.innerWidth < 640) {
-        unlockBodyScroll();
-      }
+    } else if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      document.body.style.overflow = prevBodyOverflowRef.current;
     }
     return () => {
       if (typeof window !== 'undefined' && window.innerWidth < 640) {
-        unlockBodyScroll();
+        document.body.style.overflow = prevBodyOverflowRef.current;
       }
     };
   }, [isOpen]);
