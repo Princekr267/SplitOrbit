@@ -22,7 +22,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://our-split-track-backend.vercel.app/api/:path*"
+      "destination": "https://split-orbit-backend.vercel.app/api/:path*"
     },
     {
       "source": "/(.*)",
