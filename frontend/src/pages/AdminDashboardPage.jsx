@@ -863,15 +863,15 @@ export default function AdminDashboardPage() {
                         key={act.id}
                         className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between gap-3 text-xs"
                       >
-                        <div className="flex items-center gap-2.5">
-                          <Badge variant="neutral" size="xs">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <Badge variant="neutral" size="xs" className="shrink-0">
                             {act.action}
                           </Badge>
-                          <span className="font-medium text-text">
+                          <span className="font-medium text-text truncate">
                             {act.actorName} ({act.actorRole})
                           </span>
                           {act.reason && (
-                            <span className="text-text-muted italic truncate max-w-xs">
+                            <span className="text-text-muted italic truncate min-w-0 max-w-[96px] sm:max-w-xs">
                               &ldquo;{act.reason}&rdquo;
                             </span>
                           )}
