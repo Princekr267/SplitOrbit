@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { groups, people } from '../models/index.js';
 import { recordAuditLog } from './auditService.js';
@@ -99,6 +99,37 @@ export async function settleGroup({ groupId, user, ipAddress }) {
     if (nonZeroPeople.length > 0) {
       throw new GroupOperationError(
         'Cannot settle group while member balances are non-zero. All debts must be fully repaid first.'
+      );
+    }
+
+    // Integrity check (a): sum of all nets must be 0
+    const netSum = (balanceData.people || []).reduce((acc, p) => acc + (p.net || 0), 0);
+    if (netSum !== 0 || balanceData.summary?.netSumCheck !== 0) {
+      throw new GroupOperationError(
+        'Cannot settle group: group balance integrity check failed (net balance sum is not zero).'
+      );
+    }
+
+    // Integrity check (b): no deleted person in this group can have active expenses, splits, or payments
+    const [deletedWithHistory] = await tx
+      .select({ id: people.id, name: people.name })
+      .from(people)
+      .where(
+        and(
+          eq(people.groupId, groupId),
+          eq(people.isDeleted, true),
+          sql`(
+            EXISTS (SELECT 1 FROM expenses e WHERE e.paid_by_person_id = people.id AND e.is_deleted = false)
+            OR EXISTS (SELECT 1 FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE es.person_id = people.id AND e.is_deleted = false)
+            OR EXISTS (SELECT 1 FROM payments pm WHERE (pm.from_person_id = people.id OR pm.to_person_id = people.id) AND pm.is_deleted = false)
+          )`
+        )
+      )
+      .limit(1);
+
+    if (deletedWithHistory) {
+      throw new GroupOperationError(
+        `Cannot settle group: member "${deletedWithHistory.name}" was removed but still has recorded expenses or payments.`
       );
     }
 

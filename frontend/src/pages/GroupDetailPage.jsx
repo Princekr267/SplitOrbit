@@ -918,7 +918,7 @@ ${balanceLine}`);
                           >
                             WhatsApp
                           </Button>
-                          <PersonCopyDropdown group={group} person={person} isHost={isHost} />
+                          <PersonCopyDropdown group={group} person={person} isHost={isHost} onDeleted={fetchData} />
                         </div>
                       </div>
                     </Card>

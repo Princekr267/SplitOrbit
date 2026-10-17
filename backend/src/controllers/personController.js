@@ -146,57 +146,136 @@ export async function deletePerson(req, res, next) {
   try {
     const { groupId, personId } = req.params;
 
-    await ensureGroupNotSettled(groupId);
+    const result = await db.transaction(async (tx) => {
+      await ensureGroupNotSettled(groupId, tx);
 
-    const [existing] = await db
-      .select()
-      .from(people)
-      .where(
-        and(
-          eq(people.id, personId),
-          eq(people.groupId, groupId),
-          eq(people.isDeleted, false)
+      const [existing] = await tx
+        .select()
+        .from(people)
+        .where(
+          and(
+            eq(people.id, personId),
+            eq(people.groupId, groupId),
+            eq(people.isDeleted, false)
+          )
+        );
+
+      if (!existing) {
+        return {
+          status: 404,
+          body: {
+            success: false,
+            error: { code: 'PERSON_NOT_FOUND', message: 'Person not found in this group.' },
+          },
+        };
+      }
+
+      if (existing.isHost) {
+        return {
+          status: 400,
+          body: {
+            success: false,
+            error: {
+              code: 'CANNOT_DELETE_HOST',
+              message: 'The group host cannot be removed from the group.',
+            },
+          },
+        };
+      }
+
+      // Check 1: Referenced as payer by any non-deleted expense
+      const [paidExpense] = await tx
+        .select({ id: expenses.id })
+        .from(expenses)
+        .where(
+          and(
+            eq(expenses.groupId, groupId),
+            eq(expenses.paidByPersonId, personId),
+            eq(expenses.isDeleted, false)
+          )
         )
+        .limit(1);
+
+      // Check 2: Referenced in a split of any non-deleted expense
+      const [splitRef] = await tx
+        .select({ id: expenseSplits.id })
+        .from(expenseSplits)
+        .innerJoin(
+          expenses,
+          and(
+            eq(expenseSplits.expenseId, expenses.id),
+            eq(expenses.groupId, groupId),
+            eq(expenses.isDeleted, false)
+          )
+        )
+        .where(
+          and(
+            eq(expenseSplits.personId, personId),
+            eq(expenseSplits.groupId, groupId)
+          )
+        )
+        .limit(1);
+
+      // Check 3: Referenced by any non-deleted payment (any status, as sender or receiver)
+      const [paymentRef] = await tx
+        .select({ id: payments.id })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.groupId, groupId),
+            eq(payments.isDeleted, false),
+            or(
+              eq(payments.fromPersonId, personId),
+              eq(payments.toPersonId, personId)
+            )
+          )
+        )
+        .limit(1);
+
+      if (paidExpense || splitRef || paymentRef) {
+        return {
+          status: 409,
+          body: {
+            success: false,
+            error: {
+              code: 'PERSON_HAS_HISTORY',
+              message:
+                'Cannot remove this member because they have existing expenses or payments. Please delete or reassign their expenses and payments first.',
+            },
+          },
+        };
+      }
+
+      const [deleted] = await tx
+        .update(people)
+        .set({ isDeleted: true })
+        .where(eq(people.id, personId))
+        .returning();
+
+      await recordAuditLog(
+        {
+          actor: req.user,
+          action: 'DELETE_PERSON',
+          entityType: 'Person',
+          entityId: personId,
+          groupId,
+          before: existing,
+          after: deleted,
+          ipAddress: req.ip,
+        },
+        tx
       );
 
-    if (!existing) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'PERSON_NOT_FOUND', message: 'Person not found in this group.' },
-      });
-    }
-
-    if (existing.isHost) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'CANNOT_DELETE_HOST',
-          message: 'The group host cannot be removed from the group.',
+      return {
+        status: 200,
+        body: {
+          success: true,
+          message: 'Person removed from group.',
         },
-      });
-    }
-
-    const [deleted] = await db
-      .update(people)
-      .set({ isDeleted: true })
-      .where(eq(people.id, personId))
-      .returning();
-
-    await recordAuditLog({
-      actor: req.user,
-      action: 'DELETE_PERSON',
-      entityType: 'Person',
-      entityId: personId,
-      groupId,
-      before: existing,
-      after: deleted,
-      ipAddress: req.ip,
+      };
     });
 
-    res.json({
-      success: true,
-      message: 'Person removed from group.',
-    });
+    return res.status(result.status).json(result.body);
   } catch (error) {
     next(error);
   }

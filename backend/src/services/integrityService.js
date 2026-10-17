@@ -138,9 +138,9 @@ export async function runIntegrityCheck(runByUserId = null) {
     for (const grp of activeAndSettledGroups) {
       try {
         const balances = await calculateGroupBalances(grp.id, tx);
-        const netSum = (balances.peopleBalances || []).reduce((acc, p) => acc + (p.netBalance || 0), 0);
+        const netSum = (balances.people || []).reduce((acc, p) => acc + (p.net || 0), 0);
 
-        if (netSum !== 0) {
+        if (netSum !== 0 || balances.summary?.netSumCheck !== 0) {
           issues.push({
             check: 'NET_SUM_NON_ZERO',
             groupId: grp.id,
@@ -150,7 +150,7 @@ export async function runIntegrityCheck(runByUserId = null) {
         }
 
         if (grp.status === 'settled') {
-          const nonZeroNets = (balances.peopleBalances || []).filter((p) => p.netBalance !== 0);
+          const nonZeroNets = (balances.people || []).filter((p) => p.net !== 0);
           if (nonZeroNets.length > 0) {
             issues.push({
               check: 'SETTLED_GROUP_UNBALANCED',
@@ -168,6 +168,37 @@ export async function runIntegrityCheck(runByUserId = null) {
           message: `Balance calculation error for "${grp.name}": ${err.message}`,
         });
       }
+    }
+
+    // 8. Deleted people who still have active non-deleted expenses, splits, or payments
+    const deletedWithHistoryRows = await tx.execute(sql`
+      SELECT 
+        p.id as person_id, 
+        p.name as person_name, 
+        p.group_id, 
+        g.name as group_name,
+        (SELECT COUNT(*)::int FROM expenses e WHERE e.paid_by_person_id = p.id AND e.is_deleted = false) as paid_expense_count,
+        (SELECT COUNT(*)::int FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE es.person_id = p.id AND e.is_deleted = false) as split_count,
+        (SELECT COUNT(*)::int FROM payments pm WHERE (pm.from_person_id = p.id OR pm.to_person_id = p.id) AND pm.is_deleted = false) as payment_count
+      FROM people p
+      JOIN groups g ON g.id = p.group_id
+      WHERE p.is_deleted = true
+        AND (
+          EXISTS (SELECT 1 FROM expenses e WHERE e.paid_by_person_id = p.id AND e.is_deleted = false)
+          OR EXISTS (SELECT 1 FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE es.person_id = p.id AND e.is_deleted = false)
+          OR EXISTS (SELECT 1 FROM payments pm WHERE (pm.from_person_id = p.id OR pm.to_person_id = p.id) AND pm.is_deleted = false)
+        );
+    `);
+
+    for (const row of deletedWithHistoryRows.rows || deletedWithHistoryRows) {
+      issues.push({
+        check: 'DELETED_PERSON_HAS_HISTORY',
+        groupId: row.group_id,
+        groupName: row.group_name,
+        personId: row.person_id,
+        personName: row.person_name,
+        message: `Deleted person "${row.person_name}" in group "${row.group_name}" still has active records (${row.paid_expense_count} paid expenses, ${row.split_count} splits, ${row.payment_count} payments).`,
+      });
     }
   });
 

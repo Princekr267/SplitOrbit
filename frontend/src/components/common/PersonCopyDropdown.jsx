@@ -11,6 +11,7 @@ import {
   ExternalLink,
   UserPlus,
   UserCheck,
+  Trash2,
 } from 'lucide-react';
 import { m, AnimatePresence } from 'motion/react';
 import { formatINR } from '../../utils/currency.js';
@@ -19,11 +20,12 @@ import api from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import { springs, durations } from '../../motion/tokens.js';
 
-export default function PersonCopyDropdown({ group, person, isHost = false }) {
+export default function PersonCopyDropdown({ group, person, isHost = false, onDeleted }) {
   const [isOpen, setIsOpen] = useState(false);
   const [loadingStatement, setLoadingStatement] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [deletingPerson, setDeletingPerson] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
 
   const dropdownRef = useRef(null);
@@ -203,6 +205,31 @@ ${balanceStr}${upiStr}`;
     setIsOpen(false);
   };
 
+  const handleDeletePerson = async () => {
+    if (!window.confirm(`Are you sure you want to remove ${person.name} from this group?`)) {
+      return;
+    }
+    try {
+      setDeletingPerson(true);
+      const res = await api.delete(`/groups/${group.id}/people/${person.id}`);
+      if (res.success) {
+        addToast(`${person.name} removed from group`, 'success');
+        setIsOpen(false);
+        onDeleted?.();
+      }
+    } catch (err) {
+      const isHistory =
+        err.code === 'PERSON_HAS_HISTORY' ||
+        err.response?.data?.error?.code === 'PERSON_HAS_HISTORY';
+      const msg = isHistory
+        ? `Cannot remove ${person.name}: they have recorded expenses or payments. Delete or reassign their expenses and payments first.`
+        : (err.message || 'Failed to remove member');
+      addToast(msg, 'error');
+    } finally {
+      setDeletingPerson(false);
+    }
+  };
+
   return (
     <div className="relative inline-block text-left" ref={dropdownRef}>
       {/* Trigger Button */}
@@ -358,6 +385,21 @@ ${balanceStr}${upiStr}`;
               <Share2 className="w-4 h-4 shrink-0" />
               <span>Share on WhatsApp</span>
             </m.button>
+
+            {isHost && !person.isHost && (
+              <>
+                <div className="h-px bg-border my-1" />
+                <m.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleDeletePerson}
+                  disabled={deletingPerson}
+                  className="w-full text-left px-3 py-2 flex items-center gap-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4 shrink-0" />
+                  <span>{deletingPerson ? 'Removing...' : 'Remove Member'}</span>
+                </m.button>
+              </>
+            )}
           </m.div>
         )}
       </AnimatePresence>
