@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '../config/db.js';
 import { systemSettings, users } from '../models/index.js';
 import { recordAuditLog } from './auditService.js';
-import { checkAndConsumeRateLimit } from './rateLimitService.js';
+import { checkAndConsumeRateLimit, resetRateLimit } from './rateLimitService.js';
 
 export const DEFAULT_SETTINGS = {
   allowRegistration: true,
@@ -136,4 +136,7 @@ export async function verifyAdminSensitiveAction(adminUserOrId, passwordOrOption
     error.code = 'INVALID_ADMIN_PASSWORD';
     throw error;
   }
+
+  // Reset rate limit counter on successful password match
+  await resetRateLimit(rateKey);
 }

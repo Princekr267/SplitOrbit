@@ -5,6 +5,7 @@ import { db } from '../config/db.js';
 import { users } from '../models/index.js';
 
 export const COOKIE_NAME = 'splitorbit_token';
+export const ADMIN_COOKIE_NAME = 'splitorbit_admin_token';
 
 export function getAuthCookieOptions() {
   return {
@@ -28,9 +29,9 @@ export function getClearCookieOptions() {
 export async function authenticate(req, res, next) {
   try {
     const token =
+      req.headers.authorization?.replace(/^Bearer\s+/i, '') ||
       req.cookies?.[COOKIE_NAME] ||
-      req.cookies?.['splittrack_token'] ||
-      req.headers.authorization?.replace(/^Bearer\s+/i, '');
+      req.cookies?.['splittrack_token'];
 
     if (!token) {
       return res.status(401).json({
@@ -116,6 +117,37 @@ export async function authenticate(req, res, next) {
           message: 'Your session has been signed out. Please log in again.',
         },
       });
+    }
+
+    if (decoded.impersonatedBy) {
+      const [impersonator] = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          username: users.username,
+          role: users.role,
+          isActive: users.isActive,
+        })
+        .from(users)
+        .where(eq(users.id, decoded.impersonatedBy));
+
+      if (!impersonator || !impersonator.isActive || impersonator.role !== 'admin') {
+        return res.status(401).json({
+          success: false,
+          error: {
+            code: 'IMPERSONATION_REVOKED',
+            message: 'The administrator session is no longer active.',
+          },
+        });
+      }
+
+      user.isImpersonated = true;
+      user.impersonatedBy = impersonator.id;
+      user.impersonator = {
+        id: impersonator.id,
+        name: impersonator.name,
+        username: impersonator.username,
+      };
     }
 
     req.user = user;

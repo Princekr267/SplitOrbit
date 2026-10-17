@@ -10,6 +10,7 @@ import LandingPage from './pages/LandingPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import PasswordChangedBanner from './components/common/PasswordChangedBanner.jsx';
+import ImpersonationBanner from './components/common/ImpersonationBanner.jsx';
 import ErrorBoundary from './components/common/ErrorBoundary.jsx';
 import ServerWakingIndicator from './components/common/ServerWakingIndicator.jsx';
 import { safeLazy } from './utils/safeLazy.js';
@@ -95,6 +96,7 @@ export default function App() {
           }}
           className="w-full min-h-screen flex flex-col"
         >
+          <ImpersonationBanner />
           <PasswordChangedBanner />
           <ErrorBoundary>
             <React.Suspense fallback={<BrandedAuthSkeleton />}>

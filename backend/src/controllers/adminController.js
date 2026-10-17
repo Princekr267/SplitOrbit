@@ -1,6 +1,9 @@
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import env from '../config/env.js';
 import { eq, and, sql, desc, ilike, or, isNull } from 'drizzle-orm';
 import { db } from '../config/db.js';
+import { COOKIE_NAME, ADMIN_COOKIE_NAME, getAuthCookieOptions } from '../middleware/authMiddleware.js';
 import {
   users,
   groups,
@@ -604,6 +607,137 @@ export async function forceSignOutUser(req, res, next) {
     res.json({
       success: true,
       message: 'User sessions invalidated successfully.',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Impersonate user (host / friend).
+ * Grants the administrator full access to act inside the target user's account.
+ * POST /api/admin/users/:userId/impersonate
+ */
+export async function impersonateUser(req, res, next) {
+  try {
+    const { userId } = req.params;
+    const { reason, currentPassword } = req.body || {};
+
+    await verifyAdminSensitiveAction(req.user, currentPassword, reason || 'Admin account impersonation', req.ip);
+
+    if (userId === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'SELF_IMPERSONATION_DISALLOWED',
+          message: 'You cannot impersonate your own administrator account.',
+        },
+      });
+    }
+
+    if (req.user.isImpersonated) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'NESTED_IMPERSONATION_DISALLOWED',
+          message: 'You are already impersonating another user. Please exit your current session first.',
+        },
+      });
+    }
+
+    const [targetUser] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        username: users.username,
+        email: users.email,
+        phone: users.phone,
+        role: users.role,
+        isActive: users.isActive,
+        tokenVersion: users.tokenVersion,
+        avatarColor: users.avatarColor,
+      })
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'Target user does not exist.',
+        },
+      });
+    }
+
+    if (!targetUser.isActive) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'ACCOUNT_DISABLED',
+          message: 'Cannot impersonate a deactivated account.',
+        },
+      });
+    }
+
+    // Preserve the admin's current session in ADMIN_COOKIE_NAME
+    const adminToken = jwt.sign(
+      { sub: req.user.id, userId: req.user.id, tv: req.user.tokenVersion },
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_EXPIRES_IN }
+    );
+
+    // Create impersonation token with 2-hour lifetime
+    const impersonationToken = jwt.sign(
+      {
+        sub: targetUser.id,
+        userId: targetUser.id,
+        tv: targetUser.tokenVersion,
+        impersonatedBy: req.user.id,
+      },
+      env.JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
+    // Set cookies: keep admin token in backup cookie, set active cookie to impersonation token
+    res.cookie(ADMIN_COOKIE_NAME, adminToken, getAuthCookieOptions());
+    res.cookie(COOKIE_NAME, impersonationToken, getAuthCookieOptions());
+
+    // Record audit log
+    await recordAuditLog({
+      actor: { id: req.user.id, role: 'admin', name: req.user.name },
+      action: 'admin.user.impersonate_start',
+      entityType: 'User',
+      entityId: targetUser.id,
+      reason: reason ? reason.trim() : 'Admin account impersonation',
+      before: { adminId: req.user.id, adminUsername: req.user.username },
+      after: { impersonatedUserId: targetUser.id, username: targetUser.username },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        token: impersonationToken,
+        adminToken,
+        user: {
+          id: targetUser.id,
+          name: targetUser.name,
+          username: targetUser.username,
+          email: targetUser.email,
+          phone: targetUser.phone,
+          role: targetUser.role,
+          avatarColor: targetUser.avatarColor || 'indigo',
+          isImpersonated: true,
+          impersonatedBy: req.user.id,
+          impersonator: {
+            id: req.user.id,
+            name: req.user.name,
+            username: req.user.username,
+          },
+        },
+      },
+      message: `Now accessing account as ${targetUser.name} (@${targetUser.username}).`,
     });
   } catch (error) {
     next(error);

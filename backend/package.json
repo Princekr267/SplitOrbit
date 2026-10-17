@@ -9,11 +9,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node src/config/migrate.js",
     "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
     "seed": "node src/seeds/seed.js",
     "create-admin": "node bin/create-admin.js",
     "reset-admin-password": "node bin/reset-admin-password.js",
     "integrity:check": "node bin/check-integrity.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

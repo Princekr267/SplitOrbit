@@ -148,6 +148,49 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const impersonate = async (userId, { reason, currentPassword } = {}) => {
+    const res = await api.post(`/admin/users/${userId}/impersonate`, {
+      reason,
+      currentPassword,
+    });
+    if (res?.success && res?.data) {
+      const payload = res.data;
+      if (payload.token) {
+        setStoredToken(payload.token);
+      }
+      if (payload.user) {
+        setUser(payload.user);
+        setStatus('authenticated');
+        setError(null);
+      }
+      await bootstrapAuth();
+      return payload;
+    }
+    const err = new Error(res?.error?.message || 'Failed to impersonate user.');
+    err.code = res?.error?.code;
+    throw err;
+  };
+
+  const exitImpersonation = async () => {
+    const res = await api.post('/auth/exit-impersonation');
+    if (res?.success && res?.data) {
+      const payload = res.data;
+      if (payload.token) {
+        setStoredToken(payload.token);
+      }
+      if (payload.user) {
+        setUser(payload.user);
+        setStatus('authenticated');
+        setError(null);
+      }
+      await bootstrapAuth();
+      return payload;
+    }
+    const err = new Error(res?.error?.message || 'Failed to exit impersonation.');
+    err.code = res?.error?.code;
+    throw err;
+  };
+
   const logout = async () => {
     try {
       await api.post('/auth/logout');
@@ -168,9 +211,13 @@ export function AuthProvider({ children }) {
         status,
         loading: status === 'loading',
         error,
+        isImpersonating: Boolean(user?.isImpersonated),
+        impersonator: user?.impersonator || null,
         login,
         register,
         logout,
+        impersonate,
+        exitImpersonation,
         setUser,
         refreshUser: bootstrapAuth,
         dismissPasswordNotice,

@@ -1,7 +1,10 @@
+import dns from 'node:dns';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+
+dns.setDefaultResultOrder('ipv4first');
 import env from './config/env.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 import { errorHandler } from './middleware/errorHandler.js';

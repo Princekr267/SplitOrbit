@@ -1,7 +1,11 @@
+import dns from 'node:dns';
 import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import env from './env.js';
 import * as schema from '../models/index.js';
+
+// Prioritize IPv4 to avoid ENETUNREACH delays when IPv6 is unreachable on local networks/ISPs
+dns.setDefaultResultOrder('ipv4first');
 
 const { Pool } = pg;
 
@@ -12,6 +16,8 @@ const connectionString =
 
 const poolConfig = {
   connectionString,
+  connectionTimeoutMillis: 10000, // 10s gives Neon serverless compute time to wake from idle sleep
+  idleTimeoutMillis: 30000,
 };
 
 if (env.NODE_ENV === 'production') {

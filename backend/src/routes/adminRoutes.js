@@ -20,6 +20,7 @@ import {
   getResetRequests,
   dismissResetRequest,
   generateResetCredential,
+  impersonateUser,
   runIntegrity,
   getIntegrityReport,
   getAdminShareLinks,
@@ -53,6 +54,7 @@ router.get('/users/:userId', getUserDetail);
 router.patch('/users/:userId/status', toggleUserStatus);
 router.patch('/users/:userId/role', changeUserRole);
 router.post('/users/:userId/force-sign-out', forceSignOutUser);
+router.post('/users/:userId/impersonate', impersonateUser);
 router.patch('/users/:userId/name', updateUserDisplayName);
 router.post('/users/:id/reset-credential', generateResetCredential);
 

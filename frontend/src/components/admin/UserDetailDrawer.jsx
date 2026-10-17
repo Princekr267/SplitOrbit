@@ -4,9 +4,9 @@ import Badge from '../common/Badge.jsx';
 import PersonName from '../common/PersonName.jsx';
 import api from '../../api/client.js';
 import { formatDate } from '../../utils/date.js';
-import { User, Layers, Users, Clock, Shield, KeyRound, AlertCircle } from 'lucide-react';
+import { User, Layers, Users, Clock, Shield, KeyRound, AlertCircle, LogIn } from 'lucide-react';
 
-export default function UserDetailDrawer({ userId, isOpen, onClose }) {
+export default function UserDetailDrawer({ userId, isOpen, onClose, onImpersonate, currentUserId }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -81,6 +81,17 @@ export default function UserDetailDrawer({ userId, isOpen, onClose }) {
               <Badge variant={data.user.isActive ? 'active' : 'danger'} size="sm">
                 {data.user.isActive ? 'Active' : 'Disabled'}
               </Badge>
+              {data.user.id !== currentUserId && data.user.isActive && onImpersonate && (
+                <button
+                  type="button"
+                  onClick={() => onImpersonate(data.user)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
+                  title={`Log in as ${data.user.name}`}
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Access Account</span>
+                </button>
+              )}
             </div>
           </div>
 

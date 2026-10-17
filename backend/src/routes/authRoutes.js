@@ -4,6 +4,7 @@ import {
   login,
   logout,
   me,
+  exitImpersonation,
   dismissPasswordNotice,
   checkUsernameAvailable,
   recoverWithCode,
@@ -31,6 +32,8 @@ router.post('/register', validate(registerSchema), register);
 // Login & Logout
 router.post('/login', validate(loginSchema), login);
 router.post('/logout', authenticate, logout);
+router.post('/exit-impersonation', authenticate, exitImpersonation);
+router.post('/stop-impersonation', authenticate, exitImpersonation);
 
 // Recovery code redemption
 router.post('/recover', validate(recoverSchema), recoverWithCode);

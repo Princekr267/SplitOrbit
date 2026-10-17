@@ -229,8 +229,8 @@ api.interceptors.response.use(
     customError.code = code;
     customError.details = details;
 
-    // Handle 401 Unauthorized from protected endpoints
-    if (status === 401) {
+    // Handle 401 Unauthorized from protected endpoints (except modal password confirmation check)
+    if (status === 401 && code !== 'INVALID_ADMIN_PASSWORD') {
       clearStoredToken();
       const requestedUrl = error.config?.url;
       const isProtected = isProtectedEndpoint(requestedUrl);

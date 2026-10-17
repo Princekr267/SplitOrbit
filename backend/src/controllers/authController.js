@@ -4,7 +4,7 @@ import { eq, sql, and, desc } from 'drizzle-orm';
 import env from '../config/env.js';
 import { db } from '../config/db.js';
 import { users, recoveryCodes, passwordResets, resetRequests, people, groups } from '../models/index.js';
-import { COOKIE_NAME, getAuthCookieOptions, getClearCookieOptions } from '../middleware/authMiddleware.js';
+import { COOKIE_NAME, ADMIN_COOKIE_NAME, getAuthCookieOptions, getClearCookieOptions } from '../middleware/authMiddleware.js';
 import {
   generateEightRecoveryCodes,
   verifyRecoveryCode,
@@ -996,6 +996,9 @@ export async function me(req, res) {
         passwordChangeNoticePending: user.passwordChangeNoticePending,
         passwordChangeMethod: user.passwordChangeMethod,
         passwordChangedAt: user.passwordChangedAt,
+        isImpersonated: Boolean(user.isImpersonated),
+        impersonatedBy: user.impersonatedBy || null,
+        impersonator: user.impersonator || null,
         passwordChangeNotice: user.passwordChangeNoticePending
           ? {
               changedAt: user.passwordChangedAt,
@@ -1028,11 +1031,115 @@ export async function dismissPasswordNotice(req, res, next) {
 }
 
 /**
+ * Exit impersonation mode and restore the administrator session.
+ * POST /api/auth/exit-impersonation
+ */
+export async function exitImpersonation(req, res, next) {
+  try {
+    const backupAdminToken = req.cookies?.[ADMIN_COOKIE_NAME];
+    const impersonatorId = req.user?.impersonatedBy;
+
+    if (!impersonatorId && !backupAdminToken) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'NOT_IMPERSONATING',
+          message: 'No active impersonation session found.',
+        },
+      });
+    }
+
+    let adminId = impersonatorId;
+    if (!adminId && backupAdminToken) {
+      try {
+        const decodedAdmin = jwt.verify(backupAdminToken, env.JWT_SECRET);
+        adminId = decodedAdmin.sub || decodedAdmin.userId;
+      } catch (e) {
+        // invalid backup token
+      }
+    }
+
+    if (!adminId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ADMIN_SESSION',
+          message: 'Unable to restore administrator session.',
+        },
+      });
+    }
+
+    const [adminUser] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        username: users.username,
+        email: users.email,
+        phone: users.phone,
+        role: users.role,
+        isActive: users.isActive,
+        tokenVersion: users.tokenVersion,
+        avatarColor: users.avatarColor,
+      })
+      .from(users)
+      .where(eq(users.id, adminId));
+
+    if (!adminUser || !adminUser.isActive || adminUser.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ADMIN_ACCOUNT_INVALID',
+          message: 'Administrator account is not valid or no longer active.',
+        },
+      });
+    }
+
+    const adminToken = generateToken(adminUser.id, adminUser.tokenVersion);
+
+    // Set cookie back to admin token, clear the admin backup cookie
+    res.cookie(COOKIE_NAME, adminToken, getAuthCookieOptions());
+    res.clearCookie(ADMIN_COOKIE_NAME, getClearCookieOptions());
+
+    // Record audit log
+    await recordAuditLog({
+      actor: { id: adminUser.id, role: 'admin', name: adminUser.name },
+      action: 'admin.user.impersonate_end',
+      entityType: 'User',
+      entityId: req.user.id,
+      reason: 'Admin exited impersonation session',
+      after: { restoredAdminId: adminUser.id },
+      ipAddress: getClientIp(req),
+    });
+
+    res.json({
+      success: true,
+      data: {
+        token: adminToken,
+        user: {
+          id: adminUser.id,
+          name: adminUser.name,
+          username: adminUser.username,
+          email: adminUser.email,
+          phone: adminUser.phone,
+          role: adminUser.role,
+          avatarColor: adminUser.avatarColor || 'indigo',
+          isImpersonated: false,
+        },
+      },
+      message: 'Successfully exited impersonation mode.',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
  * Logout current session.
  * POST /api/auth/logout
  */
 export async function logout(req, res) {
   res.clearCookie(COOKIE_NAME, getClearCookieOptions());
+  res.clearCookie(ADMIN_COOKIE_NAME, getClearCookieOptions());
   res.json({
     success: true,
     message: 'Logged out successfully.',

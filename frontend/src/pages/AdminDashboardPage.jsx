@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate, Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar.jsx';
 import Badge from '../components/common/Badge.jsx';
 import Modal from '../components/common/Modal.jsx';
@@ -50,6 +50,7 @@ import {
   Settings,
   UserCog,
   LogOut,
+  LogIn,
   Edit2,
   TrendingUp,
   UserPlus,
@@ -63,7 +64,8 @@ import { Stagger, AnimatedNumber } from '../motion/components.jsx';
 import { listItem } from '../motion/variants.js';
 
 export default function AdminDashboardPage() {
-  const { user } = useAuth();
+  const { user, impersonate } = useAuth();
+  const navigate = useNavigate();
   const { addToast } = useToast();
 
   // Guard: Admin only
@@ -428,6 +430,23 @@ export default function AdminDashboardPage() {
         });
         if (res.success) {
           addToast(res.message || 'User sessions invalidated', 'success');
+        }
+      },
+    });
+  };
+
+  const triggerImpersonateUser = (u) => {
+    setSensitiveAction({
+      type: 'impersonate_user',
+      title: `Access Account: ${u.name} (@${u.username})`,
+      description: `You are about to log in as ${u.name} (@${u.username}). You will have full host and member access to view and manage their groups, expenses, and account settings. You can exit back to your administrator account at any time using the top banner.`,
+      confirmLabel: 'Access Account',
+      confirmVariant: 'primary',
+      onExecute: async ({ reason, currentPassword }) => {
+        const payload = await impersonate(u.id, { reason, currentPassword });
+        if (payload?.user || payload?.token) {
+          addToast(`Now accessing SplitOrbit as ${u.name}`, 'success');
+          navigate('/dashboard');
         }
       },
     });
@@ -1159,6 +1178,18 @@ export default function AdminDashboardPage() {
 
                       {u.id !== user.id && (
                         <>
+                          {u.isActive && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => triggerImpersonateUser(u)}
+                              title={`Log in as ${u.name} (@${u.username})`}
+                              className="text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+                            >
+                              <LogIn className="w-3 h-3 text-purple-500" />
+                            </Button>
+                          )}
+
                           <Button
                             size="xs"
                             variant="ghost"
@@ -1736,6 +1767,11 @@ export default function AdminDashboardPage() {
         userId={inspectedUserId}
         isOpen={Boolean(inspectedUserId)}
         onClose={() => setInspectedUserId(null)}
+        onImpersonate={(targetUser) => {
+          setInspectedUserId(null);
+          triggerImpersonateUser(targetUser);
+        }}
+        currentUserId={user?.id}
       />
 
       {/* GROUP LEDGER MODAL */}
