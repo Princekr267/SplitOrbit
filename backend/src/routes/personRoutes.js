@@ -12,7 +12,7 @@ import {
 } from '../controllers/personController.js';
 import { generateInviteCode } from '../controllers/inviteController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
-import { requireGroupHost } from '../middleware/roleMiddleware.js';
+import { requireGroupHost, requireGroupAccess } from '../middleware/roleMiddleware.js';
 import { validate } from '../middleware/validate.js';
 import {
   addPersonSchema,
@@ -28,7 +28,7 @@ const router = Router({ mergeParams: true });
 router.use(authenticate);
 
 router.post('/', requireGroupHost, validate(addPersonSchema), addPerson);
-router.get('/', validate(groupIdParamSchema), getPeople);
+router.get('/', validate(groupIdParamSchema), requireGroupAccess, getPeople);
 router.patch('/:personId', requireGroupHost, validate(updatePersonSchema), updatePerson);
 router.delete('/:personId', requireGroupHost, validate(personParamsSchema), deletePerson);
 
@@ -40,7 +40,7 @@ router.delete('/:personId/share-link', requireGroupHost, validate(personParamsSc
 router.post('/:personId/invite', requireGroupHost, validate(personParamsSchema), generateInviteCode);
 
 // Person itemized statement
-router.get('/:personId/statement', validate(personParamsSchema), getPersonStatement);
+router.get('/:personId/statement', validate(personParamsSchema), requireGroupAccess, getPersonStatement);
 
 // Bill visibility permission (host only)
 router.patch('/:personId/permissions', requireGroupHost, validate(personPermissionsSchema), updatePersonPermissions);

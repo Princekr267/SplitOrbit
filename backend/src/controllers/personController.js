@@ -50,13 +50,36 @@ export async function getPeople(req, res, next) {
     const { groupId } = req.params;
 
     const list = await db
-      .select()
+      .select({
+        id: people.id,
+        groupId: people.groupId,
+        name: people.name,
+        phone: people.phone,
+        note: people.note,
+        isHost: people.isHost,
+        linkedUserId: people.linkedUserId,
+        shareEnabled: people.shareEnabled,
+        inviteExpiresAt: people.inviteExpiresAt,
+        canViewAllBills: people.canViewAllBills,
+        lastViewedAt: people.lastViewedAt,
+        createdAt: people.createdAt,
+        updatedAt: people.updatedAt,
+      })
       .from(people)
       .where(and(eq(people.groupId, groupId), eq(people.isDeleted, false)));
 
+    const sanitized = list.map((p) => {
+      const canSeePrivateDetails = req.isHost || p.id === req.viewerPerson?.id;
+      return {
+        ...p,
+        phone: canSeePrivateDetails ? p.phone : '',
+        note: canSeePrivateDetails ? p.note : '',
+      };
+    });
+
     res.json({
       success: true,
-      data: list,
+      data: sanitized,
     });
   } catch (error) {
     next(error);
@@ -390,6 +413,16 @@ export async function revokeShareLink(req, res, next) {
 export async function getPersonStatement(req, res, next) {
   try {
     const { groupId, personId } = req.params;
+
+    if (!req.isHost && req.viewerPerson?.id !== personId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only view your own statement.',
+        },
+      });
+    }
 
     // Fetch person and group
     const [person] = await db

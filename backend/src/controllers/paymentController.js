@@ -180,9 +180,21 @@ export async function getPayments(req, res, next) {
       },
     });
 
+    if (req.isHost || req.viewerPerson?.canViewAllBills) {
+      return res.json({
+        success: true,
+        data: paymentList,
+      });
+    }
+
+    const myPersonId = req.viewerPerson?.id;
+    const filteredPayments = paymentList.filter(
+      (p) => p.fromPersonId === myPersonId || p.toPersonId === myPersonId
+    );
+
     res.json({
       success: true,
-      data: paymentList,
+      data: filteredPayments,
     });
   } catch (error) {
     next(error);

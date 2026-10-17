@@ -7,7 +7,7 @@ import {
   rejectPayment,
 } from '../controllers/paymentController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
-import { requireGroupHost } from '../middleware/roleMiddleware.js';
+import { requireGroupHost, requireGroupAccess } from '../middleware/roleMiddleware.js';
 import { validate } from '../middleware/validate.js';
 import {
   createHostPaymentSchema,
@@ -21,7 +21,7 @@ router.use(authenticate);
 
 // Host can record payment for anyone; Friend can submit pending payment for self
 router.post('/', validate(createHostPaymentSchema), createPayment);
-router.get('/', validate(groupIdParamSchema), getPayments);
+router.get('/', validate(groupIdParamSchema), requireGroupAccess, getPayments);
 
 // Host Pending Payments Inbox
 router.get('/pending', requireGroupHost, validate(groupIdParamSchema), getPendingPayments);

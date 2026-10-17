@@ -147,9 +147,31 @@ export async function getExpenses(req, res, next) {
       },
     });
 
+    if (req.isHost || req.viewerPerson?.canViewAllBills) {
+      return res.json({
+        success: true,
+        data: expenseList,
+      });
+    }
+
+    const myPersonId = req.viewerPerson?.id;
+    const filteredList = [];
+
+    for (const exp of expenseList) {
+      const isPayer = exp.paidByPersonId === myPersonId;
+      const mySplit = exp.splits.find((s) => s.personId === myPersonId);
+
+      if (isPayer || mySplit) {
+        filteredList.push({
+          ...exp,
+          splits: exp.splits.filter((s) => s.personId === myPersonId),
+        });
+      }
+    }
+
     res.json({
       success: true,
-      data: expenseList,
+      data: filteredList,
     });
   } catch (error) {
     next(error);
