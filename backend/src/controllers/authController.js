@@ -20,6 +20,7 @@ import { recordAuditLog } from '../services/auditService.js';
 import { isReservedUsername } from '../validations/authValidation.js';
 import { getSetting } from '../services/settingsService.js';
 import { hashToken } from '../services/tokenService.js';
+import { getClientIp } from '../utils/ipHelper.js';
 
 export const BCRYPT_ROUNDS = 10;
 export const DUMMY_PASSWORD_HASH = bcrypt.hashSync('dummy_timing_salt_password', BCRYPT_ROUNDS);
@@ -42,10 +43,6 @@ function generateToken(userId, tokenVersion = 0) {
 
 function setAuthCookie(res, token) {
   res.cookie(COOKIE_NAME, token, getAuthCookieOptions());
-}
-
-function getClientIp(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '127.0.0.1';
 }
 
 /**
@@ -389,12 +386,34 @@ export async function login(req, res, next) {
     const { username, password } = req.body;
     const cleanUsername = String(username || '').toLowerCase().trim();
 
-    // 5 per 15 minutes per IP
-    const rateKey = `login:ip:${ip}`;
-    const rateCheck = await checkAndConsumeRateLimit(rateKey, 5, 15 * 60 * 1000);
+    // Rate limiting strategy:
+    // 1. Per-IP limiter (generous: 30 attempts per 15 min) prevents mass credential stuffing
+    //    from a single IP without prematurely locking out shared NAT / office / campus IPs.
+    // 2. Per-username failed limiter (strict: 5 failed attempts per 15 min) prevents distributed
+    //    brute-force attacks targeting a specific account across multiple proxies.
+    // Security tradeoff note: A per-username lockout introduces the possibility of targeted lockout DoS
+    // (an attacker intentionally locking out a known victim). To minimize impact, only failed attempts
+    // are counted, the window is limited to 15 minutes, and the response is generic so existence is not leaked.
+    const ipRateKey = `login:ip:${ip}`;
+    const userFailKey = `login:user:${cleanUsername}`;
 
-    if (!rateCheck.allowed) {
-      res.set('Retry-After', String(rateCheck.retryAfterSeconds || 900));
+    // Check IP rate limit (30 requests / 15 min)
+    const ipRateCheck = await checkAndConsumeRateLimit(ipRateKey, 30, 15 * 60 * 1000);
+    if (!ipRateCheck.allowed) {
+      res.set('Retry-After', String(ipRateCheck.retryAfterSeconds || 900));
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Too many login attempts. Please try again after 15 minutes.',
+        },
+      });
+    }
+
+    // Check per-username failed attempts limit without revealing account existence
+    const userLimitCheck = await isRateLimited(userFailKey, 5, 15 * 60 * 1000);
+    if (userLimitCheck.isLimited) {
+      res.set('Retry-After', String(userLimitCheck.retryAfterSeconds || 900));
       return res.status(429).json({
         success: false,
         error: {
@@ -411,12 +430,14 @@ export async function login(req, res, next) {
 
     // Constant-time dummy compare if user does not exist
     if (!user) {
+      await recordFailedAttempt(userFailKey, 5, 15 * 60 * 1000);
       await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       return res.status(401).json(INVALID_CREDENTIALS_RESPONSE);
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
+      await recordFailedAttempt(userFailKey, 5, 15 * 60 * 1000);
       return res.status(401).json(INVALID_CREDENTIALS_RESPONSE);
     }
 
@@ -433,13 +454,14 @@ export async function login(req, res, next) {
       });
     }
 
-    // Success: update lastLoginAt and reset login rate limit
+    // Success: update lastLoginAt and reset login rate limits
     await db
       .update(users)
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, user.id));
 
-    await resetRateLimit(rateKey);
+    await resetRateLimit(userFailKey);
+    await resetRateLimit(ipRateKey);
 
     const token = generateToken(user.id, user.tokenVersion);
     setAuthCookie(res, token);

@@ -23,6 +23,9 @@ import settingsRoutes from './routes/settingsRoutes.js';
 
 export const app = express();
 
+// Trust first proxy hop (e.g. Vercel edge reverse proxy)
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 

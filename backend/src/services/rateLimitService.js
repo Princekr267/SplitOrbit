@@ -12,43 +12,40 @@ import { authRateLimits } from '../models/authRateLimits.js';
 export async function checkAndConsumeRateLimit(key, maxLimit, windowMs) {
   const now = new Date();
 
-  // Try to find existing entry
-  const [existing] = await db
-    .select()
-    .from(authRateLimits)
-    .where(eq(authRateLimits.key, key));
+  // Atomic single-statement upsert: row-level lock on primary key ensures atomic counter updates
+  // without race conditions or lost updates under high concurrency.
+  const [row] = await db
+    .insert(authRateLimits)
+    .values({ key, count: 1, windowStart: now })
+    .onConflictDoUpdate({
+      target: authRateLimits.key,
+      set: {
+        count: sql`CASE
+          WHEN EXTRACT(EPOCH FROM (${now}::timestamptz - ${authRateLimits.windowStart})) * 1000 > ${windowMs} THEN 1
+          ELSE ${authRateLimits.count} + 1
+        END`,
+        windowStart: sql`CASE
+          WHEN EXTRACT(EPOCH FROM (${now}::timestamptz - ${authRateLimits.windowStart})) * 1000 > ${windowMs} THEN ${now}
+          ELSE ${authRateLimits.windowStart}
+        END`,
+      },
+    })
+    .returning();
 
-  if (!existing) {
-    await db
-      .insert(authRateLimits)
-      .values({ key, count: 1, windowStart: now })
-      .onConflictDoNothing();
-    return { allowed: true, remaining: maxLimit - 1, retryAfterSeconds: 0 };
-  }
+  const count = Number(row.count);
+  const windowStart = new Date(row.windowStart);
+  const windowAge = now.getTime() - windowStart.getTime();
 
-  const windowAge = now.getTime() - new Date(existing.windowStart).getTime();
-
-  if (windowAge > windowMs) {
-    // Window expired, reset counter
-    await db
-      .update(authRateLimits)
-      .set({ count: 1, windowStart: now })
-      .where(eq(authRateLimits.key, key));
-    return { allowed: true, remaining: maxLimit - 1, retryAfterSeconds: 0 };
-  }
-
-  if (existing.count >= maxLimit) {
-    const retryAfterSeconds = Math.ceil((windowMs - windowAge) / 1000);
+  if (count > maxLimit) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((windowMs - windowAge) / 1000));
     return { allowed: false, remaining: 0, retryAfterSeconds };
   }
 
-  // Increment within window
-  await db
-    .update(authRateLimits)
-    .set({ count: existing.count + 1 })
-    .where(eq(authRateLimits.key, key));
-
-  return { allowed: true, remaining: maxLimit - (existing.count + 1), retryAfterSeconds: 0 };
+  return {
+    allowed: true,
+    remaining: Math.max(0, maxLimit - count),
+    retryAfterSeconds: 0,
+  };
 }
 
 /**
