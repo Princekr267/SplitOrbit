@@ -21,6 +21,17 @@ import { isReservedUsername } from '../validations/authValidation.js';
 import { getSetting } from '../services/settingsService.js';
 import { hashToken } from '../services/tokenService.js';
 
+export const BCRYPT_ROUNDS = 10;
+export const DUMMY_PASSWORD_HASH = bcrypt.hashSync('dummy_timing_salt_password', BCRYPT_ROUNDS);
+
+export const INVALID_CREDENTIALS_RESPONSE = {
+  success: false,
+  error: {
+    code: 'INVALID_CREDENTIALS',
+    message: 'Invalid username or password.',
+  },
+};
+
 function generateToken(userId, tokenVersion = 0) {
   return jwt.sign(
     { sub: userId, userId, tv: tokenVersion },
@@ -246,7 +257,7 @@ export async function register(req, res, next) {
       });
     }
 
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(BCRYPT_ROUNDS);
     const passwordHash = await bcrypt.hash(password, salt);
 
     // Generate 8 cryptographically secure recovery codes
@@ -400,28 +411,13 @@ export async function login(req, res, next) {
 
     // Constant-time dummy compare if user does not exist
     if (!user) {
-      await bcrypt.compare(
-        password,
-        '$2b$10$wE99qF4JqF979.9999999.u99999999999999999999999999999'
-      );
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'INVALID_CREDENTIALS',
-          message: 'Incorrect username or password.',
-        },
-      });
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      return res.status(401).json(INVALID_CREDENTIALS_RESPONSE);
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'INVALID_CREDENTIALS',
-          message: 'Incorrect username or password.',
-        },
-      });
+      return res.status(401).json(INVALID_CREDENTIALS_RESPONSE);
     }
 
     if (!user.isActive) {
@@ -576,7 +572,7 @@ export async function recoverWithCode(req, res, next) {
     }
 
     // Success: mark code used, update password, bump tokenVersion, set notice
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(BCRYPT_ROUNDS);
     const newHash = await bcrypt.hash(newPassword, salt);
     const now = new Date();
 
@@ -909,7 +905,7 @@ export async function resetPassword(req, res, next) {
     }
 
     // Apply password change in transaction
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(BCRYPT_ROUNDS);
     const newHash = await bcrypt.hash(newPassword, salt);
 
     await db.transaction(async (tx) => {
