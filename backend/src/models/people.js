@@ -29,7 +29,7 @@ export const people = pgTable(
     shareEnabled: boolean('share_enabled').default(false).notNull(),
     inviteCodeHash: varchar('invite_code_hash', { length: 255 }),
     inviteExpiresAt: timestamp('invite_expires_at', { withTimezone: true }),
-    canViewAllBills: boolean('can_view_all_bills').default(false).notNull(),
+    canViewAllBills: boolean('can_view_all_bills').default(true).notNull(),
     lastViewedAt: timestamp('last_viewed_at', { withTimezone: true }),
     isDeleted: boolean('is_deleted').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
