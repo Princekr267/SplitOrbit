@@ -315,7 +315,7 @@ ${balanceLine}`);
         addToast(
           newStatus
             ? `Granted ${person.name} card visibility in group`
-            : `Set ${person.name} card to hidden from other members (default)`,
+            : `Set ${person.name} card to hidden from other members`,
           'success'
         );
       } else {
@@ -381,7 +381,7 @@ ${balanceLine}`);
   const hostPerson = people.find((p) => p.isHost);
   const currentPerson = people.find((p) => p.linkedUserId === user?.id);
 
-  // Requirement 1: Show only his and host card by default; other friends' cards become visible when host gives them permission
+  // Requirement 1: Show only his and host card, plus any friend whose card is visible to the group (on by default for new members; host can hide it per person)
   const visiblePeople = isHost
     ? people
     : people.filter((p) => p.isHost || p.id === currentPerson?.id || p.canViewAllBills);
@@ -857,7 +857,7 @@ ${balanceLine}`);
                             <div className="flex flex-col min-w-0">
                               <span className="font-semibold text-text text-[11px] truncate">Card & bills visible to group</span>
                               <span className="text-[10px] text-text-muted truncate">
-                                {person.canViewAllBills ? 'Visible to other members in group' : 'Hidden from other members (default)'}
+                                {person.canViewAllBills ? 'Visible to other members in group (default)' : 'Hidden from other members'}
                               </span>
                             </div>
                           </div>
