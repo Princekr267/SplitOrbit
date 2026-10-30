@@ -16,7 +16,6 @@ import { useToast } from '../../context/ToastContext.jsx';
 
 export default function Calculator() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('calc'); // 'calc' | 'split'
   const [expression, setExpression] = useState('');
   const [result, setResult] = useState(null);
@@ -84,21 +83,12 @@ export default function Calculator() {
     };
   }, [isOpen]);
 
-  // Hide floating calculator button whenever a modal or bottom sheet is open
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const checkModal = () => {
-      const open = document.body.hasAttribute('data-modal-open');
-      setIsModalOpen(open);
-      if (open && isOpen) {
-        setIsOpen(false);
-      }
-    };
-    checkModal();
-    const observer = new MutationObserver(checkModal);
-    observer.observe(document.body, { attributes: true, attributeFilter: ['data-modal-open'] });
-    return () => observer.disconnect();
-  }, [isOpen]);
+  // NOTE: intentionally NOT hiding the calculator when a modal is open.
+  // The old version watched data-modal-open and forced the calculator
+  // closed + hid its button whenever any modal opened. That made the
+  // calculator unusable inside the Add Expense modal, which is exactly
+  // where an amount field needs it. The button and panel now sit above
+  // modals (z-60 / z-70) so they stay usable while a modal is open.
 
   // Global custom event triggers so other components (Navbar, modals) can toggle or open calculator
   useEffect(() => {
@@ -338,8 +328,8 @@ export default function Calculator() {
         title={isOpen ? "Close Calculator" : "Open Calculator"}
         aria-label="Open financial calculator"
         aria-expanded={isOpen}
-        className={`fixed bottom-6 left-4 sm:left-6 z-40 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl shadow-2xl transition-all duration-200 flex items-center justify-center border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
-          isModalOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100'
+        className={`fixed bottom-6 left-4 sm:left-6 z-[60] w-12 h-12 sm:w-14 sm:h-14 rounded-2xl shadow-2xl transition-all duration-200 flex items-center justify-center border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
+          'opacity-100'
         } ${
           isOpen
             ? 'bg-slate-800 text-white border-slate-700 rotate-90 shadow-slate-900/40'
@@ -372,7 +362,7 @@ export default function Calculator() {
               stiffness: 340,
               mass: 0.9,
             }}
-            className="fixed inset-x-0 bottom-0 sm:inset-auto sm:bottom-24 sm:left-6 z-50 w-full sm:w-[360px] bg-white dark:bg-slate-900 border-t sm:border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col max-h-[88vh] sm:max-h-[640px] text-slate-900 dark:text-slate-100 transition-colors ring-1 ring-border/50"
+            className="fixed inset-x-0 bottom-0 sm:inset-auto sm:bottom-24 sm:left-6 z-[70] w-full sm:w-[360px] bg-white dark:bg-slate-900 border-t sm:border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col max-h-[88vh] sm:max-h-[640px] text-slate-900 dark:text-slate-100 transition-colors ring-1 ring-border/50"
           >
           {/* Top Header & Tabs */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/70 shrink-0">
