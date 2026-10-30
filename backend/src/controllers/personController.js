@@ -23,6 +23,7 @@ export async function addPerson(req, res, next) {
         note: note || '',
         isHost: false,
         shareEnabled: false,
+        canViewAllBills: true,
       })
       .returning();
 
