@@ -50,6 +50,13 @@
       "when": 1791465410915,
       "tag": "0006_add_deactivated_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791465410916,
+      "tag": "0007_default_can_view_all_bills_true",
+      "breakpoints": true
     }
   ]
 }
