@@ -101,6 +101,7 @@ export default function GroupDetailPage() {
 
   // Quick pre-selected member for modals
   const [selectedPersonForAction, setSelectedPersonForAction] = useState(null);
+  const [detailPerson, setDetailPerson] = useState(null);
 
   // Preload chart chunk on idle so Analytics tab opens instantly
   useEffect(() => {
@@ -279,10 +280,10 @@ export default function GroupDetailPage() {
     const isOwed = person.groupOwesYou > 0;
 
     const balanceLine = owes
-      ? `• Balance Due: ${formatINR(person.remainingToPay)} (owes host)`
+      ? `• To pay: ${formatINR(person.remainingToPay)} to host`
       : isOwed
-      ? `• Balance: Host owes you ${formatINR(person.groupOwesYou)}`
-      : `• Balance: Fully Settled (₹0.00)`;
+      ? `• To receive: ${formatINR(person.groupOwesYou)} from host`
+      : `• All clear (₹0.00)`;
 
     const text = encodeURIComponent(`SplitOrbit • ${group.name}
 Statement for ${person.name}:
@@ -385,6 +386,39 @@ ${balanceLine}`);
   const visiblePeople = isHost
     ? people
     : people.filter((p) => p.isHost || p.id === currentPerson?.id || p.canViewAllBills);
+
+  // Full bill for one person, built from the expenses and payments already
+  // loaded for this group. No extra request: tapping a card just shows it.
+  const getPersonBill = (person) => {
+    if (!person) return null;
+    const isPerson = (obj, id) => obj?.id === id;
+    const paidExpenses = expenses.filter(
+      (e) => e.paidByPersonId === person.id || isPerson(e.paidByPerson, person.id)
+    );
+    const sharedExpenses = expenses.filter((e) =>
+      e.splits?.some((s) => s.personId === person.id || isPerson(s.person, person.id))
+    );
+    const seen = new Set();
+    const allExpenses = [...paidExpenses, ...sharedExpenses].filter((e) => {
+      if (seen.has(e.id)) return false;
+      seen.add(e.id);
+      return true;
+    });
+    const personPayments = payments.filter(
+      (pay) =>
+        pay.fromPersonId === person.id ||
+        isPerson(pay.fromPerson, person.id) ||
+        pay.toPersonId === person.id ||
+        isPerson(pay.toPerson, person.id)
+    );
+    const shareFor = (exp) => {
+      const split = exp.splits?.find(
+        (s) => s.personId === person.id || isPerson(s.person, person.id)
+      );
+      return split ? (split.amount ?? split.shareAmount ?? null) : null;
+    };
+    return { paidExpenses, allExpenses, personPayments, shareFor };
+  };
 
   const tabList = [
     { id: 'people', label: 'People', icon: Users, count: visiblePeople.length },
@@ -611,7 +645,7 @@ ${balanceLine}`);
                   <AnimatedAmount amount={summary.totalReceived} />
                 </span>
                 <span className="text-[11px] text-text-muted block">
-                  Settled to host ledger
+                  Paid to host
                 </span>
               </Card>
             </m.div>
@@ -633,7 +667,7 @@ ${balanceLine}`);
             <m.div variants={listItem}>
               <Card interactive tint="neutral" className="p-4 space-y-1">
                 <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">
-                  Host Net Balance
+                  Host Total
                 </span>
                 {hostPerson && (
                   <>
@@ -650,10 +684,10 @@ ${balanceLine}`);
                     </span>
                     <span className="text-[11px] text-text-muted block truncate">
                       {hostPerson.net > 0
-                        ? 'Friends owe you'
+                        ? 'Friends pay you'
                         : hostPerson.net < 0
-                        ? 'You owe the group'
-                        : 'All settled'}
+                        ? 'You pay the group'
+                        : 'All clear'}
                     </span>
                   </>
                 )}
@@ -715,7 +749,7 @@ ${balanceLine}`);
           onChange={(newTab) => setActiveTab(newTab)}
         />
 
-        {/* TAB 1: People & Balances */}
+        {/* TAB 1: People & Payments */}
         {activeTab === 'people' && (
           <div className="space-y-4 animate-fade-in">
             {visiblePeople.length === 0 ? (
@@ -749,7 +783,8 @@ ${balanceLine}`);
                       <Card
                         interactive
                         tint={personTint}
-                        className="flex flex-col justify-between space-y-4 h-full"
+                        className="flex flex-col justify-between space-y-4 h-full cursor-pointer"
+                        onClick={() => setDetailPerson(person)}
                       >
                       {/* Header with Avatar, Name, Phone and Share Dropdown */}
                       <div className="flex items-start justify-between gap-3">
@@ -793,7 +828,7 @@ ${balanceLine}`);
                             return owesMoney ? (
                               <div className="inline-flex flex-col items-end">
                                 <span className="text-[10px] uppercase font-bold text-rose-600 dark:text-rose-400 tracking-wider">
-                                  Owes Host
+                                  To Pay
                                 </span>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   {personSparkline && personSparkline.length > 1 && (
@@ -807,7 +842,7 @@ ${balanceLine}`);
                             ) : isOwed ? (
                               <div className="inline-flex flex-col items-end">
                                 <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">
-                                  Group Owes
+                                  To Receive
                                 </span>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   {personSparkline && personSparkline.length > 1 && (
@@ -820,14 +855,14 @@ ${balanceLine}`);
                               </div>
                             ) : (
                               <Badge variant="settled" size="xs" showIcon>
-                                Settled ₹0.00
+                                All Clear ₹0.00
                               </Badge>
                             );
                           })()}
                         </div>
                       </div>
 
-                      {/* Financial details breakdown (Share, Paid, Repaid) */}
+                      {/* Totals: share, paid, repaid. Tap the card for the full bill. */}
                       <div className="grid grid-cols-3 gap-2 py-2.5 px-3 rounded-xl bg-surface-raised border border-border text-[11px]">
                         <div>
                           <span className="text-text-muted block text-[10px] uppercase font-semibold">Share</span>
@@ -836,7 +871,7 @@ ${balanceLine}`);
                           </span>
                         </div>
                         <div>
-                          <span className="text-text-muted block text-[10px] uppercase font-semibold">Paid Exp</span>
+                          <span className="text-text-muted block text-[10px] uppercase font-semibold">Paid</span>
                           <span className="text-text font-bold block mt-0.5 font-mono tabular-nums">
                             {formatINR(person.paidExpensesTotal)}
                           </span>
@@ -849,9 +884,16 @@ ${balanceLine}`);
                         </div>
                       </div>
 
+                      <p className="text-[11px] text-text-muted text-center">
+                        Tap the card to see {person.isHost ? 'your' : `${person.name.split(' ')[0]}'s`} full bill
+                      </p>
+
                       {/* Visibility Permission Toggle (Host Only for non-host members) */}
                       {isHost && !person.isHost && (
-                        <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-surface-raised/60 border border-border text-xs">
+                        <div
+                          className="flex items-center justify-between py-2 px-3 rounded-xl bg-surface-raised/60 border border-border text-xs"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <div className="flex items-center gap-2 min-w-0">
                             <Eye className={`w-3.5 h-3.5 shrink-0 ${person.canViewAllBills ? 'text-brand-500' : 'text-text-muted'}`} />
                             <div className="flex flex-col min-w-0">
@@ -886,7 +928,10 @@ ${balanceLine}`);
                       )}
 
                       {/* Contextual Action Buttons (Requirement 2: show only authorized buttons) */}
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border flex-wrap">
+                      <div
+                        className="flex items-center justify-between gap-2 pt-2 border-t border-border flex-wrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {group.status === 'active' && (
                           <div className="flex items-center gap-1.5 flex-1">
                             {isHost && (
@@ -1232,7 +1277,7 @@ ${balanceLine}`);
         onClose={() => setSettleDialogOpen(false)}
         onConfirm={handleConfirmSettle}
         title="Settle & Lock Group?"
-        description="All member balances are currently ₹0. Settling this group will lock it from further expenses or edits until reopened by the host."
+        description="All member payments are settled (₹0 to pay). Settling this group will lock it from further expenses or edits until reopened by the host."
         confirmText="Settle & Lock"
         variant="primary"
         loading={settling}
@@ -1283,6 +1328,134 @@ ${balanceLine}`);
           </div>
         </form>
       </Modal>
+
+      {/* Person Bill Details: opens when any person's card is tapped */}
+      {detailPerson && (() => {
+        const bill = getPersonBill(detailPerson);
+        const owesMoney = detailPerson.remainingToPay > 0;
+        const isOwed = detailPerson.groupOwesYou > 0;
+        return (
+          <Modal
+            isOpen={Boolean(detailPerson)}
+            onClose={() => setDetailPerson(null)}
+            title={`${detailPerson.name} — full bill`}
+            maxWidth="max-w-lg"
+          >
+            <div className="space-y-5">
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="p-3 rounded-xl bg-surface-raised border border-border">
+                  <span className="text-text-muted block text-[10px] uppercase font-semibold">Share</span>
+                  <span className="text-text font-bold block mt-1 font-mono tabular-nums">
+                    {formatINR(detailPerson.shareSplitsTotal)}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-surface-raised border border-border">
+                  <span className="text-text-muted block text-[10px] uppercase font-semibold">Paid</span>
+                  <span className="text-text font-bold block mt-1 font-mono tabular-nums">
+                    {formatINR(detailPerson.paidExpensesTotal)}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-surface-raised border border-border">
+                  <span className="text-text-muted block text-[10px] uppercase font-semibold">Repaid</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold block mt-1 font-mono tabular-nums">
+                    {formatINR(detailPerson.acceptedSentPaymentsTotal)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
+                <span className="text-sm font-semibold text-text">
+                  {owesMoney
+                    ? 'To pay'
+                    : isOwed
+                      ? 'To receive'
+                      : 'All clear'}
+                </span>
+                {owesMoney ? (
+                  <span className="text-lg font-black text-rose-600 dark:text-rose-400 font-mono tabular-nums">
+                    {formatINR(detailPerson.remainingToPay)}
+                  </span>
+                ) : isOwed ? (
+                  <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
+                    {formatINR(detailPerson.groupOwesYou)}
+                  </span>
+                ) : (
+                  <Badge variant="settled" size="sm" showIcon>
+                    All Clear ₹0.00
+                  </Badge>
+                )}
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-2">
+                  Expenses ({bill.allExpenses.length})
+                </h4>
+                {bill.allExpenses.length === 0 ? (
+                  <p className="text-xs text-text-muted">No expenses found for this person in this view.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {bill.allExpenses.map((exp) => {
+                      const share = bill.shareFor(exp);
+                      const paidByThem =
+                        exp.paidByPersonId === detailPerson.id ||
+                        exp.paidByPerson?.id === detailPerson.id;
+                      return (
+                        <div key={exp.id} className="flex items-start justify-between gap-3 p-3 rounded-xl bg-surface-raised border border-border">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-text truncate">{exp.title}</p>
+                            <p className="text-[11px] text-text-muted">
+                              {formatDate(exp.date)} • Paid by {exp.paidByPerson?.name || 'Unknown'}
+                              {share !== null && !paidByThem && ` • Their share ${formatINR(share)}`}
+                              {paidByThem && ` • Total ${formatINR(exp.totalAmount)}`}
+                            </p>
+                          </div>
+                          <span className="text-sm font-bold text-text font-mono tabular-nums shrink-0">
+                            {formatINR(share !== null ? share : exp.totalAmount)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-2">
+                  Payments ({bill.personPayments.length})
+                </h4>
+                {bill.personPayments.length === 0 ? (
+                  <p className="text-xs text-text-muted">No payments recorded for this person.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {bill.personPayments.map((pay) => (
+                      <div key={pay.id} className="flex items-start justify-between gap-3 p-3 rounded-xl bg-surface-raised border border-border">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-text truncate">
+                            {pay.fromPerson?.name} → {pay.toPerson?.name}
+                          </p>
+                          <p className="text-[11px] text-text-muted">
+                            {formatDate(pay.date)} • {pay.status}
+                            {pay.mode ? ` • ${pay.mode}` : ''}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold text-text font-mono tabular-nums shrink-0">
+                          {formatINR(pay.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <Button variant="secondary" size="sm" onClick={() => setDetailPerson(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
