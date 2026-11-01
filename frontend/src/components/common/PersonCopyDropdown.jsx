@@ -61,10 +61,10 @@ export default function PersonCopyDropdown({ group, person, isHost = false, onDe
     const isOwed = person.groupOwesYou > 0;
 
     const balanceLine = owes
-      ? `• Balance Due: ${formatINR(person.remainingToPay)} (owes host)`
+      ? `• To pay: ${formatINR(person.remainingToPay)} to host`
       : isOwed
-      ? `• Balance: Host owes you ${formatINR(person.groupOwesYou)}`
-      : `• Balance: Fully Settled (₹0.00)`;
+      ? `• To receive: ${formatINR(person.groupOwesYou)} from host`
+      : `• All clear (₹0.00)`;
 
     const hostUpi = group?.hostUpi;
     const upiLine = hostUpi ? `\n• Pay to UPI: ${hostUpi}` : '';
@@ -119,10 +119,10 @@ ${balanceLine}${upiLine}`;
       const owes = data.summary.remainingToPay > 0;
       const isOwed = data.summary.groupOwesYou > 0;
       const balanceStr = owes
-        ? `*Balance Due (Owes Host):* *${formatINR(data.summary.remainingToPay)}*`
+        ? `*To Pay:* *${formatINR(data.summary.remainingToPay)}*`
         : isOwed
-        ? `*Group Owes You:* *${formatINR(data.summary.groupOwedYou || data.summary.groupOwesYou)}*`
-        : `*Status:* *Settled (₹0.00)*`;
+        ? `*To Receive:* *${formatINR(data.summary.groupOwedYou || data.summary.groupOwesYou)}*`
+        : `*Status:* *All Clear (₹0.00)*`;
 
       const upiStr = data.hostUpi ? `\nPay to UPI: ${data.hostUpi}` : '';
 
