@@ -307,11 +307,11 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Live Balance & Ledger Stats Bento */}
+        {/* Payments Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-surface p-4 rounded-2xl border border-border space-y-1 shadow-sm">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">
-              Owed to You
+              You Receive
             </span>
             <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 block font-mono">
               <AnimatedAmount amount={stats.totalOwedToMe} />
@@ -321,7 +321,7 @@ export default function ProfilePage() {
 
           <div className="bg-surface p-4 rounded-2xl border border-border space-y-1 shadow-sm">
             <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block">
-              You Owe
+              You Pay
             </span>
             <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 block font-mono">
               <AnimatedAmount amount={stats.totalIOwe} />
