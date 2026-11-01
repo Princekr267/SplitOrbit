@@ -152,15 +152,15 @@ export function getNiceTicks(min, max, count = 5) {
  * @returns {string}
  */
 export function buildDivergingBarsSummary(balances = []) {
-  if (!balances || balances.length === 0) return 'No balances recorded in this group.';
+  if (!balances || balances.length === 0) return 'No payments recorded in this group.';
   const statements = balances.map((b) => {
     const net = Number(b.net) || 0;
     if (net < 0) {
-      return `${b.name} owes ${formatFullINR(Math.abs(net), true)}`;
+      return `${b.name} needs to pay ${formatFullINR(Math.abs(net), true)}`;
     } else if (net > 0) {
-      return `${b.name} is owed ${formatFullINR(net, true)}`;
+      return `${b.name} receives ${formatFullINR(net, true)}`;
     }
-    return `${b.name} is settled up`;
+    return `${b.name} is all clear`;
   });
   return statements.join('. ') + '.';
 }
@@ -194,12 +194,12 @@ export function buildAreaLineSummary(series = [], target) {
   const lastPoint = series[count - 1];
   if (lastPoint.collected !== undefined) {
     const collectedStr = formatFullINR(lastPoint.collected, true);
-    const targetStr = target ? ` of ${formatFullINR(target, true)} owed` : '';
+    const targetStr = target ? ` of ${formatFullINR(target, true)} to pay` : '';
     return `Repayment pace across ${count} data points. Total collected ${collectedStr}${targetStr}.`;
   }
   if (lastPoint.remaining !== undefined) {
     const remainingStr = formatFullINR(lastPoint.remaining, true);
-    return `Dues trajectory across ${count} events. Current remaining due is ${remainingStr}.`;
+    return `Payments trajectory across ${count} events. Current remaining amount is ${remainingStr}.`;
   }
   return `Timeline chart with ${count} data points.`;
 }
@@ -210,9 +210,9 @@ export function buildAreaLineSummary(series = [], target) {
  * @returns {string}
  */
 export function buildColumnBarsSummary(buckets = []) {
-  if (!buckets || buckets.length === 0) return 'No pending dues aging data.';
+  if (!buckets || buckets.length === 0) return 'No pending payments aging data.';
   const details = buckets.map((b) => `${b.key} days: ${formatFullINR(b.amount, true)}`);
-  return 'Pending dues aging: ' + details.join(', ') + '.';
+  return 'Pending payments aging: ' + details.join(', ') + '.';
 }
 
 /**
