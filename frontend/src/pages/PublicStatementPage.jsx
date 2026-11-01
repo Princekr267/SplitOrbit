@@ -189,15 +189,15 @@ export default function PublicStatementPage() {
           </Card>
         </div>
 
-        {/* Sticky Remaining to Pay Card */}
+        {/* Sticky To Pay Card */}
         <div className="sticky top-14 z-20 pt-1 pb-1">
           <div className="bg-surface/95 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-border flex items-center justify-between shadow-md transition-shadow">
             <div>
               <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">
-                Remaining to Pay
+                To Pay
               </span>
               <span className="text-xs text-text-muted block mt-0.5 font-medium">
-                {owes ? 'Amount to return to host' : isOwed ? 'Host owes you' : 'All debts settled'}
+                {owes ? 'Amount to return to host' : isOwed ? 'Host pays you' : 'All clear'}
               </span>
             </div>
 
@@ -208,7 +208,7 @@ export default function PublicStatementPage() {
                     <AnimatedAmount amount={totals.remainingToPay} />
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                    Owes Host
+                    To Pay Host
                   </span>
                 </div>
               ) : isOwed ? (
@@ -217,12 +217,12 @@ export default function PublicStatementPage() {
                     <AnimatedAmount amount={totals.groupOwesYou} />
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                    Group Owes You
+                    Host Pays You
                   </span>
                 </div>
               ) : (
                 <Badge variant="settled" size="sm" showIcon>
-                  Settled ₹0.00
+                  All Clear ₹0.00
                 </Badge>
               )}
             </div>
@@ -285,7 +285,7 @@ export default function PublicStatementPage() {
                   Link this statement to your account
                 </span>
                 <span className="text-[11px] text-text-muted block">
-                  Signed in as <strong className="text-text font-semibold">@{user.username}</strong>. Connect this profile to submit repayments and track pooled balances.
+                  Signed in as <strong className="text-text font-semibold">@{user.username}</strong>. Connect this profile to submit repayments and track shared payments.
                 </span>
               </div>
               <Button
