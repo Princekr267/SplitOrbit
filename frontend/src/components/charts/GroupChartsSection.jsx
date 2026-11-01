@@ -87,17 +87,17 @@ export function GroupChartsSection({
     <div className="space-y-5 animate-fade-in">
       {/* 12-Column Responsive Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-        {/* Chart 1: Who Owes What (Spans 2 columns on desktop) */}
+        {/* Chart 1: Who Pays What (Spans 2 columns on desktop) */}
         <ChartCard
-          title="Who Owes What"
-          subtitle="Net balance per member, centered on zero (includes host)"
+          title="Who Pays What"
+          subtitle="To pay or to receive per member, centered on zero (includes host)"
           error={error}
           onRetry={onRetry}
           empty={balances.length === 0}
-          emptyMessage="No balances recorded in this group yet."
+          emptyMessage="No payments recorded in this group yet."
           tableData={{
-            caption: 'Net balance per member',
-            headers: ['Member', 'Handle', 'Net Balance'],
+            caption: 'To pay or to receive per member',
+            headers: ['Member', 'Handle', 'To Pay / Receive'],
             rows: balances.map((b) => [
               b.name,
               b.username ? `@${b.username}` : '—',
@@ -114,16 +114,16 @@ export function GroupChartsSection({
           title="Collection Progress"
           subtitle={
             isFullyRecovered
-              ? 'All dues settled up'
+              ? 'All clear'
               : `${formatFullINR(collected.collected, true)} of ${formatFullINR(
                   collected.totalOwed,
                   true
-                )} total owed`
+                )} total to pay`
           }
           error={error}
           onRetry={onRetry}
           empty={collected.totalOwed === 0}
-          emptyMessage="No shared dues have been created yet."
+          emptyMessage="No shared payments have been created yet."
           tableData={{
             caption: 'Collection progress breakdown',
             headers: ['Category', 'Amount'],
@@ -132,7 +132,7 @@ export function GroupChartsSection({
               collected.pending > 0
                 ? ['Pending Approval', formatFullINR(collected.pending, true)]
                 : null,
-              ['Remaining Dues', formatFullINR(collected.remaining, true)],
+              ['Remaining To Pay', formatFullINR(collected.remaining, true)],
             ].filter(Boolean),
           }}
           legend={
@@ -187,14 +187,14 @@ export function GroupChartsSection({
         {/* Chart 3: Repayment Pace (Area Line Chart) */}
         <ChartCard
           title="Repayment Pace"
-          subtitle="Cumulative repayments over time vs total group owed"
+          subtitle="Cumulative repayments over time vs total group amount"
           error={error}
           onRetry={onRetry}
           empty={pace.length === 0}
           emptyMessage="No repayment timeline recorded yet."
           tableData={{
             caption: 'Repayment pace by date',
-            headers: ['Date', 'Cumulative Recovered', 'Target Owed'],
+            headers: ['Date', 'Cumulative Recovered', 'Target Amount'],
             rows: pace.map((p) => [
               p.date,
               formatFullINR(p.collected, true),
@@ -265,17 +265,17 @@ export function GroupChartsSection({
           />
         </ChartCard>
 
-        {/* Chart 5: Pending Dues Aging */}
+        {/* Chart 5: Pending Payments Aging */}
         <ChartCard
-          title="Pending Dues Aging"
+          title="Pending Payments Aging"
           subtitle="FIFO age from original expense date"
           error={error}
           onRetry={onRetry}
           empty={agingBuckets.length === 0 || collected.remaining === 0}
-          emptyMessage="No outstanding pending dues to age."
+          emptyMessage="No outstanding pending payments."
           tableData={{
-            caption: 'Pending dues aging buckets',
-            headers: ['Age Bracket', 'Remaining Due', 'Members'],
+            caption: 'Pending payments aging buckets',
+            headers: ['Age Bracket', 'Remaining To Pay', 'Members'],
             rows: agingBuckets.map((b) => [
               `${b.key} days`,
               formatFullINR(b.amount, true),
