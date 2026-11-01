@@ -368,13 +368,13 @@ export default function FriendDashboardPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-surface p-4 rounded-2xl border border-border space-y-1 shadow-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block">
-                Total You Owe
+                To Pay
               </span>
               <span className={`text-xl sm:text-2xl font-black mt-1 block font-mono tabular-nums ${totalRemainingAcrossGroups > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                 {formatINR(totalRemainingAcrossGroups)}
               </span>
               <span className="text-[11px] text-text-muted block">
-                Net remaining balance
+                Across all groups
               </span>
             </div>
 
@@ -478,7 +478,7 @@ export default function FriendDashboardPage() {
                         {owesMoney ? (
                           <div>
                             <span className="text-[10px] uppercase font-bold text-rose-600 dark:text-rose-400 tracking-wider block">
-                              You Owe Host
+                              To Pay Host
                             </span>
                             <span className="text-xl font-black text-rose-600 dark:text-rose-400 block font-mono tabular-nums">
                               {formatINR(summary.remainingToPay)}
@@ -490,13 +490,13 @@ export default function FriendDashboardPage() {
                               Status
                             </span>
                             <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 block font-mono tabular-nums">
-                              Fully Settled (₹0)
+                              All Clear (₹0)
                             </span>
                           </div>
                         ) : (
                           <div>
                             <span className="text-[10px] uppercase font-bold text-teal-600 dark:text-teal-400 tracking-wider block">
-                              Host Owes You
+                              Host Pays You
                             </span>
                             <span className="text-xl font-black text-teal-600 dark:text-teal-400 block font-mono tabular-nums">
                               {formatINR(summary.groupOwesYou)}
@@ -633,15 +633,15 @@ export default function FriendDashboardPage() {
                             </p>
                           ) : (
                             <>
-                              {/* Sticky Remaining to Pay Card */}
+                              {/* Sticky To Pay Card */}
                               <div className="sticky top-16 z-20 pt-1 pb-2">
                                 <div className="bg-surface/95 backdrop-blur-md p-4 rounded-xl border border-border flex items-center justify-between shadow-md">
                                   <div>
                                     <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">
-                                      Remaining to Pay
+                                      To Pay
                                     </span>
                                     <span className="text-xs text-text-muted block mt-0.5 font-medium">
-                                      {owesMoney ? 'Amount to return to host' : summary.groupOwesYou > 0 ? 'Host owes you' : 'All debts settled'}
+                                      {owesMoney ? 'Amount to return to host' : summary.groupOwesYou > 0 ? 'Host pays you' : 'All clear'}
                                     </span>
                                   </div>
                                   <div className="text-right">
@@ -655,7 +655,7 @@ export default function FriendDashboardPage() {
                                       </span>
                                     ) : (
                                       <Badge variant="settled" size="sm" showIcon>
-                                        Settled ₹0.00
+                                        All Clear ₹0.00
                                       </Badge>
                                     )}
                                   </div>
@@ -756,7 +756,7 @@ export default function FriendDashboardPage() {
                                                 ? 'Verified by host'
                                                 : isPending
                                                 ? 'Awaiting host verification'
-                                                : 'Not applied to balance'}
+                                                : 'Not applied yet'}
                                             </span>
                                           </div>
                                         </m.div>
