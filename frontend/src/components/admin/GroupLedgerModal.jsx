@@ -88,7 +88,7 @@ export default function GroupLedgerModal({ groupId, isOpen, onClose }) {
           <div className="space-y-2.5">
             <h4 className="text-xs font-bold text-text uppercase tracking-wider flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-brand-500" />
-              <span>Member Net Balances ({data.balances?.people?.length || 0})</span>
+              <span>Member Payments ({data.balances?.people?.length || 0})</span>
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
               {data.balances?.people?.map((p) => {
@@ -120,7 +120,7 @@ export default function GroupLedgerModal({ groupId, isOpen, onClose }) {
                         {formatINR(p.net)}
                       </span>
                       <span className="text-[9px] uppercase tracking-wider text-text-muted block">
-                        {owesMoney ? 'Owes' : isOwed ? 'Gets Back' : 'Settled'}
+                        {owesMoney ? 'To Pay' : isOwed ? 'To Receive' : 'All Clear'}
                       </span>
                     </div>
                   </div>
