@@ -127,7 +127,7 @@ describe('Chart Math & Formatting Helpers', () => {
       ]);
       assert.equal(
         summary,
-        'Aman owes ₹1,200. Meera owes ₹800. Rahul is owed ₹2,300.'
+        'Aman needs to pay ₹1,200. Meera needs to pay ₹800. Rahul receives ₹2,300.'
       );
     });
 
@@ -166,7 +166,7 @@ describe('Chart Math & Formatting Helpers', () => {
       ]);
       assert.equal(
         summary,
-        'Pending dues aging: 0-3 days: ₹5,000, 4-7 days: ₹2,000, 8-14 days: ₹0, 15+ days: ₹1,000.'
+        'Pending payments aging: 0-3 days: ₹5,000, 4-7 days: ₹2,000, 8-14 days: ₹0, 15+ days: ₹1,000.'
       );
     });
 
