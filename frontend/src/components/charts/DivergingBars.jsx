@@ -74,9 +74,9 @@ export function DivergingBars({ balances = [], summary = '' }) {
     >
       {/* Zero-axis indicator bar */}
       <div className="relative flex items-center justify-between text-[10px] text-text-muted font-medium px-2 py-0.5 border-b border-border/60">
-        <span className="text-danger">← Owes</span>
+        <span className="text-danger">← To Pay</span>
         <span className="font-semibold text-text">Zero (₹0)</span>
-        <span className="text-success">Owed →</span>
+        <span className="text-success">To Receive →</span>
       </div>
 
       <div className="space-y-1.5 py-1">
@@ -95,7 +95,7 @@ export function DivergingBars({ balances = [], summary = '' }) {
               id={`diverging-row-${person.personId}`}
               tabIndex={0}
               role="button"
-              aria-label={`${person.name}: ${net < 0 ? 'owes' : net > 0 ? 'is owed' : 'settled'} ${formatFullINR(absNet, true)}`}
+              aria-label={`${person.name}: ${net < 0 ? 'to pay' : net > 0 ? 'to receive' : 'all clear'} ${formatFullINR(absNet, true)}`}
               onPointerEnter={(e) => handleFocusRow(person, e)}
               onPointerLeave={() => {
                 setHoveredId(null);
@@ -128,7 +128,7 @@ export function DivergingBars({ balances = [], summary = '' }) {
                 {/* Center line */}
                 <div className="absolute left-1/2 top-0 bottom-0 w-px bg-border z-10" />
 
-                {/* Left bar (Owes - danger) */}
+                {/* Left bar (To Pay - danger) */}
                 {isOwes && (
                   <div className="absolute right-1/2 h-4 flex items-center justify-end pr-0.5">
                     <m.div
@@ -156,7 +156,7 @@ export function DivergingBars({ balances = [], summary = '' }) {
                   </div>
                 )}
 
-                {/* Right bar (Owed - success) */}
+                {/* Right bar (To Receive - success) */}
                 {isOwed && (
                   <div className="absolute left-1/2 h-4 flex items-center justify-start pl-0.5">
                     <m.div
@@ -229,10 +229,10 @@ export function DivergingBars({ balances = [], summary = '' }) {
           tooltipData
             ? `${tooltipData.item.name}: ${
                 Number(tooltipData.item.net) < 0
-                  ? 'Owes ' + formatFullINR(Math.abs(tooltipData.item.net), true)
+                  ? 'To pay ' + formatFullINR(Math.abs(tooltipData.item.net), true)
                   : Number(tooltipData.item.net) > 0
-                  ? 'Is owed ' + formatFullINR(tooltipData.item.net, true)
-                  : 'Settled up'
+                  ? 'To receive ' + formatFullINR(tooltipData.item.net, true)
+                  : 'All clear'
               }`
             : ''
         }
