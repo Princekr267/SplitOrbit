@@ -43,7 +43,7 @@ export default function AddPaymentModal({
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
 
-  // Expandable Bills & Dues Card state
+  // Expandable Bills Card state
   const [isBillsExpanded, setIsBillsExpanded] = useState(false);
 
   const totalExpensesPaise = expenses.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
@@ -67,7 +67,7 @@ export default function AddPaymentModal({
           defaultToPersonId || (defaultPayer === hostPerson?.id && friends.length > 0 ? friends[0].id : hostPerson?.id || people[0].id);
         setToPersonId(defaultRecipient);
 
-        // Autofill amount if default payer has remaining dues
+        // Autofill amount if default payer still has to pay
         const payerObj = people.find((p) => p.id === defaultPayer);
         if (payerObj && payerObj.remainingToPay > 0 && !amountRupees) {
           setAmountRupees(paiseToRupees(payerObj.remainingToPay));
@@ -133,10 +133,10 @@ export default function AddPaymentModal({
 
   const recipientOptions = people.filter((p) => p.id !== effectiveSenderId);
 
-  const getDuesShortLabel = (p) => {
-    if (p.remainingToPay > 0) return `Owes ${formatINR(p.remainingToPay)}`;
-    if (p.groupOwesYou > 0) return `Gets ${formatINR(p.groupOwesYou)}`;
-    return 'Settled (₹0)';
+  const getPayShortLabel = (p) => {
+    if (p.remainingToPay > 0) return `To pay ${formatINR(p.remainingToPay)}`;
+    if (p.groupOwesYou > 0) return `To receive ${formatINR(p.groupOwesYou)}`;
+    return 'All clear (₹0)';
   };
 
   return (
@@ -147,7 +147,7 @@ export default function AddPaymentModal({
       maxWidth="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Expandable Bills & Member Dues Card */}
+        {/* Expandable Bills & Member Payments Card */}
         <m.div
           layout="position"
           transition={springs.smooth}
@@ -169,7 +169,7 @@ export default function AddPaymentModal({
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs sm:text-sm font-bold text-text">
-                    Bills & Member Dues Breakdown
+                    Bills & Member Payments Breakdown
                   </span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-brand-500/15 text-brand-700 dark:text-brand-300">
                     {expenses.length} {expenses.length === 1 ? 'Bill' : 'Bills'} • {formatINR(totalExpensesPaise)}
@@ -177,8 +177,8 @@ export default function AddPaymentModal({
                 </div>
                 <p className="text-[11px] text-text-muted mt-0.5 truncate">
                   {isBillsExpanded
-                    ? 'Tap to hide bills & dues details'
-                    : 'Tap to reveal all bills, split shares & member balances'}
+                    ? 'Tap to hide bill details'
+                    : 'Tap to reveal all bills and split shares'}
                 </p>
               </div>
             </div>
@@ -214,13 +214,13 @@ export default function AddPaymentModal({
                 className="overflow-hidden border-t border-border"
               >
                 <div className="p-3.5 sm:p-4 bg-surface space-y-4 max-h-80 overflow-y-auto">
-                  {/* Member Net Dues Overview */}
+                  {/* Member Payments Overview */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-text-muted">
                         <Users className="w-3.5 h-3.5 text-brand-500" />
                         <span className="text-[11px] font-bold uppercase tracking-wider text-text">
-                          Member Net Dues
+                          Member Payments
                         </span>
                       </div>
                       <span className="text-[10px] text-text-muted">
@@ -251,7 +251,7 @@ export default function AddPaymentModal({
                                 ? 'bg-brand-500/10 border-brand-500/30 shadow-xs'
                                 : 'bg-surface-raised/70 hover:bg-surface-raised border-border'
                             }`}
-                            title={`Click to use ${p.name}'s balance`}
+                            title={`Click to autofill from ${p.name}`}
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <div className="w-6 h-6 rounded-full bg-surface border border-border flex items-center justify-center font-bold text-[10px] text-text-muted shrink-0">
@@ -277,15 +277,15 @@ export default function AddPaymentModal({
                             <div className="text-right shrink-0">
                               {owes ? (
                                 <span className="font-bold text-rose-600 dark:text-rose-400 font-mono text-[11px] tabular-nums block">
-                                  Owes {formatINR(p.remainingToPay)}
+                                  To pay {formatINR(p.remainingToPay)}
                                 </span>
                               ) : isOwed ? (
                                 <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-[11px] tabular-nums block">
-                                  Gets {formatINR(p.groupOwesYou)}
+                                  To receive {formatINR(p.groupOwesYou)}
                                 </span>
                               ) : (
                                 <span className="text-text-muted font-mono text-[10px] block">
-                                  Settled (₹0)
+                                  All clear (₹0)
                                 </span>
                               )}
                             </div>
@@ -428,17 +428,17 @@ export default function AddPaymentModal({
               >
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} {p.isHost ? '(Host)' : ''} — {getDuesShortLabel(p)}
+                    {p.name} {p.isHost ? '(Host)' : ''} — {getPayShortLabel(p)}
                   </option>
                 ))}
               </select>
             )}
 
-            {/* Sender Dues Summary line */}
+            {/* Sender Summary line */}
             {selectedPayer && (
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
                 <span className="text-text-muted">
-                  Total Dues:{' '}
+                  To settle:{' '}
                   <strong
                     className={
                       selectedPayer.remainingToPay > 0
@@ -449,10 +449,10 @@ export default function AddPaymentModal({
                     }
                   >
                     {selectedPayer.remainingToPay > 0
-                      ? `Owes ${formatINR(selectedPayer.remainingToPay)}`
+                      ? `To pay ${formatINR(selectedPayer.remainingToPay)}`
                       : selectedPayer.groupOwesYou > 0
-                      ? `Is owed ${formatINR(selectedPayer.groupOwesYou)}`
-                      : 'Settled (₹0.00)'}
+                      ? `To receive ${formatINR(selectedPayer.groupOwesYou)}`
+                      : 'All clear (₹0.00)'}
                   </strong>
                 </span>
                 {selectedPayer.remainingToPay > 0 && (
@@ -479,16 +479,16 @@ export default function AddPaymentModal({
             >
               {recipientOptions.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} {p.isHost ? '(Host)' : ''} — {getDuesShortLabel(p)}
+                  {p.name} {p.isHost ? '(Host)' : ''} — {getPayShortLabel(p)}
                 </option>
               ))}
             </select>
 
-            {/* Recipient Dues Summary line */}
+            {/* Recipient Summary line */}
             {selectedRecipient && (
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
                 <span className="text-text-muted">
-                  Total Dues:{' '}
+                  To settle:{' '}
                   <strong
                     className={
                       selectedRecipient.remainingToPay > 0
@@ -499,10 +499,10 @@ export default function AddPaymentModal({
                     }
                   >
                     {selectedRecipient.remainingToPay > 0
-                      ? `Owes ${formatINR(selectedRecipient.remainingToPay)}`
+                      ? `To pay ${formatINR(selectedRecipient.remainingToPay)}`
                       : selectedRecipient.groupOwesYou > 0
-                      ? `Is owed ${formatINR(selectedRecipient.groupOwesYou)}`
-                      : 'Settled (₹0.00)'}
+                      ? `To receive ${formatINR(selectedRecipient.groupOwesYou)}`
+                      : 'All clear (₹0.00)'}
                   </strong>
                 </span>
               </div>
@@ -616,7 +616,7 @@ export default function AddPaymentModal({
 
         {isHost ? (
           <p className="text-[11px] text-emerald-600 dark:text-emerald-400/90 bg-emerald-500/10 p-2.5 rounded-lg border border-emerald-500/20">
-            ✓ Recorded by you as host. This payment is automatically accepted and immediately updates official balances.
+            ✓ Recorded by you as host. This payment is automatically accepted and immediately updates everyone's payments.
           </p>
         ) : (
           <p className="text-[11px] text-amber-600 dark:text-amber-400/90 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
