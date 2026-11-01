@@ -73,7 +73,7 @@ export function getBalanceVisuals(netPaise) {
   if (netPaise > 0) {
     return {
       status: 'owes',
-      label: 'Owes',
+      label: 'To Pay',
       colorClass: 'text-rose-600 dark:text-rose-400',
       bgClass: 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300',
       badgeVariant: 'danger',
@@ -82,7 +82,7 @@ export function getBalanceVisuals(netPaise) {
   if (netPaise < 0) {
     return {
       status: 'owed',
-      label: 'Is Owed',
+      label: 'To Receive',
       colorClass: 'text-emerald-600 dark:text-emerald-400',
       bgClass: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300',
       badgeVariant: 'success',
@@ -90,7 +90,7 @@ export function getBalanceVisuals(netPaise) {
   }
   return {
     status: 'settled',
-    label: 'Settled',
+    label: 'All Clear',
     colorClass: 'text-text-muted',
     bgClass: 'bg-surface-raised border-border text-text-muted',
     badgeVariant: 'settled',
