@@ -70,7 +70,7 @@ export default function HostDashboardPage() {
               Welcome back, {user?.name?.split(' ')[0]} 👋
             </h1>
             <p className="text-xs sm:text-sm text-text-muted mt-1">
-              Manage your shared outings, track expenses, and view member balances.
+              Manage your shared outings, track expenses, and view member payments.
             </p>
           </div>
 
@@ -126,7 +126,7 @@ export default function HostDashboardPage() {
                   <AnimatedNumber value={totalSettled} />
                 </span>
                 <span className="text-[11px] text-text-muted block">
-                  Balances zeroed and locked
+                  Payments settled and locked
                 </span>
               </Card>
             </m.div>
