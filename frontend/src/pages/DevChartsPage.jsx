@@ -125,7 +125,7 @@ export default function DevChartsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {/* Diverging Bars (Top 6 with expander) */}
             <ChartCard
-              title="Who Owes What"
+              title="Who Pays What"
               subtitle="Net balances centered on zero axis"
               tableData={{
                 caption: 'Net balances by person',
@@ -161,7 +161,7 @@ export default function DevChartsPage() {
             {/* Repayment Pace Area Line Chart with Target */}
             <ChartCard
               title="Repayment Pace"
-              subtitle="Cumulative recoveries vs total group dues"
+              subtitle="Cumulative recoveries vs total group amount"
               className="lg:col-span-2"
               tableData={{
                 caption: 'Repayment pace over time',
@@ -176,9 +176,9 @@ export default function DevChartsPage() {
               />
             </ChartCard>
 
-            {/* Pending Dues Aging Column Bars */}
+            {/* Pending Payments Aging Column Bars */}
             <ChartCard
-              title="Pending Dues Aging"
+              title="Pending Payments Aging"
               subtitle="FIFO age from original expense date"
               tableData={{
                 caption: 'Aging buckets breakdown',
@@ -201,9 +201,9 @@ export default function DevChartsPage() {
             2. Friend Statement Visualizations
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Friend Dues Over Time with Pending Markers */}
+            {/* Friend Payments Over Time with Pending Markers */}
             <ChartCard
-              title="Your Dues Over Time"
+              title="Your Payments Over Time"
               subtitle="Decreases only on accepted repayments; hollow circle = pending"
             >
               <AreaLineChart
@@ -221,7 +221,7 @@ export default function DevChartsPage() {
             >
               <div className="w-full space-y-3 py-4">
                 <div className="flex items-center justify-between p-3 rounded-xl bg-surface-raised/60">
-                  <span className="text-xs font-semibold">Karan (owes ₹4,500)</span>
+                  <span className="text-xs font-semibold">Karan (to pay ₹4,500)</span>
                   <div className="flex items-center gap-3">
                     <Sparkline data={[1200000, 1000000, 800000, 450000]} />
                     <span className="font-mono text-xs font-bold text-danger">₹4,500</span>
