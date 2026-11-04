@@ -11,6 +11,7 @@ import { m, AnimatePresence } from 'motion/react';
 import { springs } from '../motion/tokens.js';
 
 import { isValidNextUrl } from '../utils/url.js';
+import { enableDemoMode } from '../api/client.js';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -213,9 +214,16 @@ export default function LoginPage() {
                 setPassword('hostpassword123');
                 try {
                   setLoading(true);
+                  enableDemoMode({
+                    id: 'demo-user-1',
+                    name: 'Vikram Sharma',
+                    username: 'vikram',
+                    role: 'host',
+                    email: 'vikram@example.com',
+                  });
                   await login('vikram', 'hostpassword123');
                   addToast('Signed in as Demo Host (Vikram)', 'success');
-                  navigate(returnUrl);
+                  navigate(validNext || '/dashboard', { replace: true });
                 } catch (err) {
                   setErrorMessage(err.message || 'Failed to sign in as host');
                 } finally {

@@ -194,7 +194,7 @@ export function buildAreaLineSummary(series = [], target) {
   const lastPoint = series[count - 1];
   if (lastPoint.collected !== undefined) {
     const collectedStr = formatFullINR(lastPoint.collected, true);
-    const targetStr = target ? ` of ${formatFullINR(target, true)} to pay` : '';
+    const targetStr = target ? ` of ${formatFullINR(target, true)} owed` : '';
     return `Repayment pace across ${count} data points. Total collected ${collectedStr}${targetStr}.`;
   }
   if (lastPoint.remaining !== undefined) {
