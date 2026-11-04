@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
       }
 
       setUser(null);
-      setStatus('error');
+      setStatus('unauthenticated');
       setError(err);
       return null;
     }
