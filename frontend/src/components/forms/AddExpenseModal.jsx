@@ -19,6 +19,8 @@ export default function AddExpenseModal({
   const [amountRupees, setAmountRupees] = useState('');
   const [paidByPersonId, setPaidByPersonId] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('food');
+  const [paymentStatus, setPaymentStatus] = useState('Pending');
   const [splitType, setSplitType] = useState('equal');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
@@ -133,7 +135,10 @@ export default function AddExpenseModal({
         totalAmount: totalPaise,
         date: new Date(date).toISOString(),
         paidByPersonId,
-        description: description.trim(),
+        category,
+        paymentStatus,
+        status: paymentStatus,
+        description: description.trim() ? `${description.trim()} [cat:${category}]` : `[cat:${category}]`,
         splitType,
         selectedPersonIds: splitType === 'equal' ? selectedPersonIds : [],
         splits: payloadSplits,
