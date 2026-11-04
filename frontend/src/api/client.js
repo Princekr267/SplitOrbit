@@ -659,6 +659,30 @@ function handleOfflineFallback(config) {
     return { success: true, data: {} };
   }
 
+  // 19.5 Update Person Permissions (canViewAllBills toggle)
+  const permMatch = cleanUrl.match(/\/people\/([^/]+)\/permissions$/);
+  if (permMatch && method === 'patch') {
+    const pId = Number(permMatch[1]);
+    const p = state.people.find((person) => person.id === pId);
+    if (p && data.canViewAllBills !== undefined) {
+      p.canViewAllBills = Boolean(data.canViewAllBills);
+    }
+    saveDemoState(state);
+    return { success: true, data: p || {} };
+  }
+
+  // 19.6 Bulk Set View All Bills Toggle
+  if (cleanUrl.includes('/bulk') && method === 'patch') {
+    const enabled = Boolean(data.enabled ?? data.canViewAllBills ?? true);
+    state.people.forEach((p) => {
+      if (!p.isHost) {
+        p.canViewAllBills = enabled;
+      }
+    });
+    saveDemoState(state);
+    return { success: true, data: { enabled } };
+  }
+
   // 20. Statement & Share Links
   if (cleanUrl.includes('/statement') || cleanUrl.includes('/s/')) {
     return {

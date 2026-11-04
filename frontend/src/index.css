@@ -443,3 +443,340 @@
     padding-top: 10px;
   }
 }
+
+/* ==========================================================================
+   Figma Spending Overview Chart & Axes
+   ========================================================================== */
+.chart-area {
+  display: flex !important;
+  gap: 12px !important;
+  height: 220px !important;
+  padding-top: 14px !important;
+  position: relative !important;
+  width: 100% !important;
+}
+
+.y-labels {
+  width: 58px !important;
+  padding: 4px 0 24px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  color: var(--text-muted) !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  text-align: right !important;
+  flex-shrink: 0 !important;
+  user-select: none !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.line-chart {
+  position: relative !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.grid-lines {
+  position: absolute !important;
+  inset: 4px 0 24px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  pointer-events: none !important;
+}
+
+.grid-lines i {
+  display: block !important;
+  border-top: 1px dashed var(--border) !important;
+  width: 100% !important;
+}
+
+.line-chart svg {
+  position: relative !important;
+  width: 100% !important;
+  height: calc(100% - 24px) !important;
+  overflow: visible !important;
+  display: block !important;
+}
+
+.area-fill {
+  fill: url(#spendingGradient) !important;
+  stroke: none !important;
+}
+
+.chart-line {
+  fill: none !important;
+  stroke: #08b98d !important;
+  stroke-width: 2.8 !important;
+  vector-effect: non-scaling-stroke !important;
+}
+
+.dark .chart-line {
+  stroke: #20d6a8 !important;
+}
+
+.line-chart circle {
+  fill: var(--surface) !important;
+  stroke: #08b98d !important;
+  stroke-width: 2.4 !important;
+  vector-effect: non-scaling-stroke !important;
+  transition: r 0.15s ease, stroke-width 0.15s ease;
+}
+
+.dark .line-chart circle {
+  fill: #111c33 !important;
+  stroke: #20d6a8 !important;
+}
+
+.line-chart circle:hover {
+  r: 6 !important;
+  stroke-width: 3 !important;
+  cursor: pointer;
+}
+
+.x-labels {
+  display: flex !important;
+  justify-content: space-between !important;
+  color: var(--text-muted) !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  height: 20px !important;
+  align-items: center !important;
+  user-select: none !important;
+  margin-top: 4px !important;
+  width: 100% !important;
+}
+
+.chart-legend {
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  margin-top: 8px !important;
+  padding-top: 10px !important;
+  border-top: 1px solid var(--border) !important;
+}
+
+.legend-dot {
+  display: inline-block !important;
+  width: 8px !important;
+  height: 8px !important;
+  margin-right: 6px !important;
+  border-radius: 50% !important;
+  background: #08b98d !important;
+}
+
+.dark .legend-dot {
+  background: #20d6a8 !important;
+}
+
+.chart-summary strong {
+  margin-left: 5px !important;
+  color: var(--text) !important;
+  font-weight: 700 !important;
+}
+
+/* ==========================================================================
+   Figma Referenced Bill Design & Tabs
+   ========================================================================== */
+.bills-panel {
+  border-radius: 16px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+  overflow: hidden !important;
+}
+
+.bills-header {
+  padding: 18px 22px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  flex-wrap: wrap !important;
+}
+
+.people-tabs {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 0 20px !important;
+  border-top: 1px solid var(--border) !important;
+  border-bottom: 1px solid var(--border) !important;
+  overflow-x: auto !important;
+  scrollbar-width: none !important;
+  background: var(--surface-raised) !important;
+}
+
+.people-tabs::-webkit-scrollbar {
+  display: none !important;
+}
+
+.people-tabs button {
+  height: 46px !important;
+  flex: none !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 13px !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.people-tabs button:hover {
+  color: var(--text) !important;
+}
+
+.people-tabs button.active {
+  color: #08b98d !important;
+  border-bottom-color: #08b98d !important;
+}
+
+.dark .people-tabs button.active {
+  color: #20d6a8 !important;
+  border-bottom-color: #20d6a8 !important;
+}
+
+.people-tabs button > span.badge-count {
+  padding: 2px 7px !important;
+  border-radius: 10px !important;
+  background: var(--border) !important;
+  color: var(--text-muted) !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+}
+
+.people-tabs button.active > span.badge-count {
+  background: rgba(8, 185, 141, 0.15) !important;
+  color: #08b98d !important;
+}
+
+.dark .people-tabs button.active > span.badge-count {
+  background: rgba(32, 214, 168, 0.15) !important;
+  color: #20d6a8 !important;
+}
+
+/* Status Badges */
+.status {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 10px !important;
+  border-radius: 9999px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  white-space: nowrap !important;
+}
+
+.status::before {
+  content: '' !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: currentColor !important;
+}
+
+.status.paid {
+  color: #059669 !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+}
+
+.dark .status.paid {
+  color: #34d399 !important;
+  background: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(52, 211, 153, 0.25) !important;
+}
+
+.status.half {
+  color: #d97706 !important;
+  background: rgba(245, 158, 11, 0.12) !important;
+  border: 1px solid rgba(245, 158, 11, 0.25) !important;
+}
+
+.dark .status.half {
+  color: #fbbf24 !important;
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(251, 191, 36, 0.25) !important;
+}
+
+.status.pending {
+  color: #e11d48 !important;
+  background: rgba(244, 63, 94, 0.12) !important;
+  border: 1px solid rgba(244, 63, 94, 0.25) !important;
+}
+
+.dark .status.pending {
+  color: #fb7185 !important;
+  background: rgba(244, 63, 94, 0.15) !important;
+  border-color: rgba(251, 113, 133, 0.25) !important;
+}
+
+.status.settled {
+  color: #2563eb !important;
+  background: rgba(37, 99, 235, 0.12) !important;
+  border: 1px solid rgba(37, 99, 235, 0.25) !important;
+}
+
+.dark .status.settled {
+  color: #60a5fa !important;
+  background: rgba(37, 99, 235, 0.15) !important;
+  border-color: rgba(96, 165, 250, 0.25) !important;
+}
+
+/* Category Icons */
+.bill-icon {
+  width: 36px !important;
+  height: 36px !important;
+  flex: none !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 10px !important;
+  color: #08b98d !important;
+  background: rgba(8, 185, 141, 0.12) !important;
+}
+
+.bill-icon.rent {
+  color: #4f46e5 !important;
+  background: rgba(79, 70, 229, 0.12) !important;
+}
+
+.bill-icon.utilities {
+  color: #0284c7 !important;
+  background: rgba(2, 132, 199, 0.12) !important;
+}
+
+.bill-icon.groceries {
+  color: #d97706 !important;
+  background: rgba(217, 119, 6, 0.12) !important;
+}
+
+.bill-icon.internet {
+  color: #8b5cf6 !important;
+  background: rgba(139, 92, 246, 0.12) !important;
+}
+
+.bill-icon.services {
+  color: #db2777 !important;
+  background: rgba(219, 39, 119, 0.12) !important;
+}
+
+.table-wrap {
+  overflow-x: auto !important;
+  width: 100% !important;
+}

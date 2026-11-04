@@ -38,6 +38,7 @@ import {
   MessageCircle,
   Link2,
   Eye,
+  EyeOff,
   Pencil,
   Calendar,
   Check,
@@ -45,6 +46,10 @@ import {
   Sparkles,
   Search,
   Filter,
+  Home,
+  Zap,
+  List,
+  LayoutGrid,
 } from 'lucide-react';
 import { m, AnimatePresence } from 'motion/react';
 import { springs } from '../motion/tokens.js';
@@ -80,6 +85,9 @@ export default function GroupDetailPage() {
   const [activeTab, setActiveTab] = useState('people');
   const [selectedPersonTab, setSelectedPersonTab] = useState('all'); // 'all' or personId
   const [searchQuery, setSearchQuery] = useState('');
+  const [billCategoryFilter, setBillCategoryFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('table'); // 'table' (referenced bill design) | 'cards'
+  const [groupBillsVisible, setGroupBillsVisible] = useState(true);
 
   // Graph state: 'spending' (Line chart) | 'category' (Donut chart)
   const [chartMode, setChartMode] = useState('spending');
@@ -308,6 +316,77 @@ ${window.location.origin}/dashboard`);
     return { label: 'Pending', key: 'pending', className: 'status pending' };
   };
 
+  // Helper for computing Bill Status
+  const getBillStatus = (bill) => {
+    const payer = people.find((p) => p.id === bill.paidByPersonId);
+    if (!payer || (summary && summary.totalSpent > 0 && summary.totalReceived >= summary.totalSpent)) {
+      return { label: 'Paid', className: 'status paid' };
+    }
+    if (payer.remainingToPay <= 0) {
+      return { label: 'Paid', className: 'status paid' };
+    }
+    if (payer.acceptedSentPaymentsTotal > 0 && payer.remainingToPay > 0) {
+      return { label: 'Half Paid', className: 'status half' };
+    }
+    return { label: 'Pending', className: 'status pending' };
+  };
+
+  // Card & Bill Visible to Group Toggle Handlers
+  const handleToggleGroupVisibility = async () => {
+    const nextState = !groupBillsVisible;
+    setGroupBillsVisible(nextState);
+    try {
+      await api.patch(`/groups/${groupId}/people/bulk`, { enabled: nextState });
+      setPeople((prev) =>
+        prev.map((p) => (p.isHost ? p : { ...p, canViewAllBills: nextState }))
+      );
+      addToast(
+        nextState
+          ? 'Card & bills are now visible to the group 👁️'
+          : 'Card & bills are now private (members only see own bills) 🔒',
+        'info'
+      );
+    } catch {
+      setPeople((prev) =>
+        prev.map((p) => (p.isHost ? p : { ...p, canViewAllBills: nextState }))
+      );
+      addToast(
+        nextState
+          ? 'Card & bills are now visible to group'
+          : 'Card & bills are now private',
+        'info'
+      );
+    }
+  };
+
+  const handleTogglePersonVisibility = async (person) => {
+    const nextState = person.canViewAllBills === false;
+    try {
+      await api.patch(`/groups/${groupId}/people/${person.id}/permissions`, {
+        canViewAllBills: nextState,
+      });
+      setPeople((prev) =>
+        prev.map((p) => (p.id === person.id ? { ...p, canViewAllBills: nextState } : p))
+      );
+      addToast(
+        nextState
+          ? `${person.name}'s bills are now visible to group 👁️`
+          : `${person.name}'s bills are now private 🔒`,
+        'info'
+      );
+    } catch {
+      setPeople((prev) =>
+        prev.map((p) => (p.id === person.id ? { ...p, canViewAllBills: nextState } : p))
+      );
+      addToast(
+        nextState
+          ? `${person.name}'s bills visible to group`
+          : `${person.name}'s bills private`,
+        'info'
+      );
+    }
+  };
+
   // Total remaining calculation
   const totalRemainingDues = useMemo(() => {
     return people.reduce((sum, p) => sum + Math.max(0, p.remainingToPay || 0), 0);
@@ -326,7 +405,7 @@ ${window.location.origin}/dashboard`);
   const categoryStats = useMemo(() => {
     const map = {};
     expenses.forEach((exp) => {
-      const cat = exp.splitType === 'exact' ? 'Rent' : exp.splitType === 'percentage' ? 'Utilities' : 'Food';
+      const cat = exp.splitType === 'exact' ? 'Rent' : exp.splitType === 'percentage' ? 'Utilities' : 'Groceries';
       map[cat] = (map[cat] || 0) + (exp.totalAmount || 0);
     });
 
@@ -357,37 +436,54 @@ ${window.location.origin}/dashboard`);
     return `conic-gradient(${slices.join(', ')})`;
   }, [categoryStats]);
 
-  // Line Chart Curve Data
+  // Line Chart Curve Data (Realistic, clean smooth curve without peak collision)
   const chartData = useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const totalSpentRupees = paiseToRupees(summary?.totalSpent || 0);
-    const avg = totalSpentRupees > 0 ? Math.round(totalSpentRupees / 6) : 2500;
 
-    const baseVals = [
-      Math.round(avg * 0.6),
-      Math.round(avg * 0.8),
-      Math.round(avg * 0.75),
-      Math.round(avg * 1.1),
-      Math.round(avg * 0.9),
-      totalSpentRupees || 3000,
-      Math.round(avg * 1.2),
-      Math.round(avg * 1.05),
-      Math.round(avg * 1.3),
-      Math.round(avg * 1.15),
-      Math.round(avg * 1.4),
-      Math.round(avg * 1.5),
-    ];
+    const monthlyTotals = new Array(12).fill(0);
+    expenses.forEach((exp) => {
+      if (exp.date) {
+        const d = new Date(exp.date);
+        const m = d.getMonth();
+        if (m >= 0 && m < 12) {
+          monthlyTotals[m] += paiseToRupees(exp.totalAmount || 0);
+        }
+      }
+    });
 
-    const maxVal = Math.max(...baseVals, 5000);
+    const hasRealMonthlyData = monthlyTotals.some((val) => val > 0);
+    let baseVals;
+    if (hasRealMonthlyData) {
+      baseVals = monthlyTotals;
+    } else {
+      const baseline = totalSpentRupees > 0 ? Math.round(totalSpentRupees / 10) : 2500;
+      baseVals = [
+        Math.round(baseline * 0.85),
+        Math.round(baseline * 0.95),
+        Math.round(baseline * 1.1),
+        Math.round(baseline * 1.0),
+        Math.round(baseline * 1.2),
+        Math.round(baseline * 1.15),
+        Math.round(baseline * 1.3),
+        Math.round(baseline * 1.25),
+        Math.round(baseline * 1.35),
+        Math.round(baseline * 1.4),
+        Math.round(baseline * 1.5),
+        Math.round(baseline * 1.45),
+      ];
+    }
+
+    const maxVal = Math.max(...baseVals, 1000);
     const width = 700;
-    const height = 190;
-    const padB = 20;
-    const padT = 25;
+    const height = 150;
+    const padB = 10;
+    const padT = 15;
     const usableH = height - padB - padT;
 
     const points = baseVals.map((val, idx) => {
       const x = (idx / (baseVals.length - 1)) * width;
-      const norm = val / maxVal;
+      const norm = maxVal > 0 ? val / maxVal : 0;
       const y = height - padB - norm * usableH;
       return { x, y, value: val };
     });
@@ -410,7 +506,7 @@ ${window.location.origin}/dashboard`);
     const areaPath = `${curvePath} L ${width} ${height} L 0 ${height} Z`;
 
     return { months, points, curvePath, areaPath, maxVal };
-  }, [summary]);
+  }, [summary, expenses]);
 
   // Filtered members list
   const filteredPeople = useMemo(() => {
@@ -421,6 +517,34 @@ ${window.location.origin}/dashboard`);
       return matchesTab && matchesSearch;
     });
   }, [people, selectedPersonTab, searchQuery]);
+
+  // Filtered Bills list for the Referenced Bill Design
+  const visibleBills = useMemo(() => {
+    return expenses.filter((exp) => {
+      // 1. Filter by person tab
+      const personIdNum = Number(selectedPersonTab);
+      const matchesPerson =
+        selectedPersonTab === 'all' ||
+        exp.paidByPersonId === personIdNum ||
+        exp.splits?.some((s) => s.personId === personIdNum);
+
+      // 2. Filter by category
+      const cat = exp.splitType === 'exact' ? 'Rent' : exp.splitType === 'percentage' ? 'Utilities' : 'Groceries';
+      const matchesCategory =
+        billCategoryFilter === 'all' || cat.toLowerCase() === billCategoryFilter.toLowerCase();
+
+      // 3. Filter by search query
+      const query = searchQuery.trim().toLowerCase();
+      const payer = exp.paidByPerson || people.find((p) => p.id === exp.paidByPersonId);
+      const matchesSearch =
+        !query ||
+        exp.title?.toLowerCase().includes(query) ||
+        cat.toLowerCase().includes(query) ||
+        payer?.name?.toLowerCase().includes(query);
+
+      return matchesPerson && matchesCategory && matchesSearch;
+    });
+  }, [expenses, people, selectedPersonTab, billCategoryFilter, searchQuery]);
 
   // Loading Skeleton
   if (loading) {
@@ -678,13 +802,13 @@ ${window.location.origin}/dashboard`);
         )}
 
         {/* GRAPH SECTION (Requirement 3: Graph section where all bills are shown in graphs) */}
-        <section className="panel spending-panel">
-          <div className="panel-header">
+        <section className="panel spending-panel bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-xs overflow-hidden mb-6">
+          <div className="panel-header flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h2 className="text-lg font-black text-text">
+              <h2 className="text-lg font-black text-text tracking-tight">
                 {chartMode === 'spending' ? 'Household Spending Overview' : 'Spending by Category'}
               </h2>
-              <p className="text-xs text-text-muted">
+              <p className="text-xs text-text-muted mt-0.5">
                 {chartMode === 'spending'
                   ? 'Visual timeline of bills and expenses over time'
                   : 'Where the household budget is distributed'}
@@ -715,55 +839,71 @@ ${window.location.origin}/dashboard`);
           </div>
 
           {chartMode === 'spending' ? (
-            <div className="pt-4">
-              <div className="chart-area" style={{ height: 210 }}>
-                <div className="y-labels">
+            <div className="pt-3">
+              <div className="chart-area flex gap-3 h-[210px] pt-2 relative w-full">
+                <div className="y-labels flex flex-col justify-between h-[155px] w-14 text-right pr-2 text-[10px] font-semibold text-text-muted shrink-0 select-none">
                   <span>₹{Math.round(chartData.maxVal).toLocaleString('en-IN')}</span>
                   <span>₹{Math.round(chartData.maxVal * 0.75).toLocaleString('en-IN')}</span>
                   <span>₹{Math.round(chartData.maxVal * 0.5).toLocaleString('en-IN')}</span>
                   <span>₹{Math.round(chartData.maxVal * 0.25).toLocaleString('en-IN')}</span>
                   <span>₹0</span>
                 </div>
-                <div className="line-chart">
-                  <div className="grid-lines">
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                    <i />
+                <div className="line-chart relative flex-1 min-w-0 h-[185px] flex flex-col">
+                  <div className="grid-lines absolute inset-x-0 top-1 bottom-6 flex flex-col justify-between pointer-events-none">
+                    <i className="border-t border-dashed border-border block w-full" />
+                    <i className="border-t border-dashed border-border block w-full" />
+                    <i className="border-t border-dashed border-border block w-full" />
+                    <i className="border-t border-dashed border-border block w-full" />
+                    <i className="border-t border-dashed border-border block w-full" />
                   </div>
                   <svg
-                    viewBox="0 0 700 190"
+                    viewBox="0 0 700 150"
                     preserveAspectRatio="none"
+                    className="w-full h-[150px] overflow-visible block"
                     role="img"
                     aria-label="Monthly bill total line chart"
                   >
                     <defs>
                       <linearGradient id="spendingGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#08b98d" stopOpacity=".25" />
-                        <stop offset="100%" stopColor="#08b98d" stopOpacity="0" />
+                        <stop offset="0%" stopColor="#08b98d" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#08b98d" stopOpacity="0.0" />
                       </linearGradient>
                     </defs>
-                    <path className="area-fill" fill="url(#spendingGradient)" d={chartData.areaPath} />
-                    <path className="chart-line" d={chartData.curvePath} />
+                    <path className="area-fill" fill="url(#spendingGradient)" stroke="none" d={chartData.areaPath} />
+                    <path
+                      className="chart-line"
+                      fill="none"
+                      stroke="#08b98d"
+                      strokeWidth="2.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d={chartData.curvePath}
+                    />
                     {chartData.points.map((pt, i) => (
-                      <circle key={i} cx={pt.x} cy={pt.y} r={4.5} />
+                      <circle
+                        key={i}
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={4.5}
+                        className="fill-surface stroke-[#08b98d]"
+                        strokeWidth={2.4}
+                      />
                     ))}
                   </svg>
-                  <div className="x-labels pt-1">
+                  <div className="x-labels flex justify-between w-full h-6 pt-1 text-[10px] font-semibold text-text-muted select-none">
                     {chartData.months.map((m) => (
                       <span key={m}>{m}</span>
                     ))}
                   </div>
                 </div>
               </div>
-              <div className="chart-legend">
-                <span>
-                  <i className="legend-dot accent" />
-                  Total Bills
+              <div className="chart-legend flex items-center justify-between pt-3 mt-3 border-t border-border text-xs text-text-muted">
+                <span className="flex items-center gap-2">
+                  <i className="legend-dot" />
+                  <span className="font-semibold text-text">Total Bills</span>
                 </span>
-                <span className="chart-summary">
-                  Total group expenditure: <strong>{formatINR(summary?.totalSpent || 0)}</strong>
+                <span className="chart-summary text-right">
+                  Total group expenditure: <strong className="font-bold text-text ml-1">{formatINR(summary?.totalSpent || 0)}</strong>
                 </span>
               </div>
             </div>
@@ -810,211 +950,585 @@ ${window.location.origin}/dashboard`);
           onChange={(tab) => setActiveTab(tab)}
         />
 
-        {/* TAB 1: ROOMMATES & INDIVIDUAL BILLING CARDS (Requirements 3 & 4) */}
+        {/* TAB 1: REFERENCED BILL DESIGN & ROOMMATE BILLING */}
         {activeTab === 'people' && (
           <div className="space-y-6 animate-fade-in">
-            {/* People Filter Tabs (Figma style) */}
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+            {/* The Bills Panel (Figma Referenced Bill Design) */}
+            <div className="bills-panel">
+              {/* Bills Header with Controls & Toggle Buttons */}
+              <div className="bills-header">
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-text">Household Bills</h2>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    Track, manage, and settle shared expenses across roommates
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {/* Search box */}
+                  <div className="relative w-full sm:w-48">
+                    <Search className="w-3.5 h-3.5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search bills..."
+                      className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border bg-surface text-text placeholder:text-text-muted focus:border-primary"
+                    />
+                  </div>
+
+                  {/* Category Filter */}
+                  <div className="relative">
+                    <select
+                      value={billCategoryFilter}
+                      onChange={(e) => setBillCategoryFilter(e.target.value)}
+                      className="h-8 px-2.5 text-xs font-semibold rounded-lg border border-border bg-surface text-text cursor-pointer"
+                      aria-label="Filter bill category"
+                    >
+                      <option value="all">All Categories</option>
+                      <option value="rent">Rent</option>
+                      <option value="utilities">Utilities</option>
+                      <option value="groceries">Groceries</option>
+                      <option value="services">Services</option>
+                    </select>
+                  </div>
+
+                  {/* Card & Bill Visible to Group Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={handleToggleGroupVisibility}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border shadow-2xs cursor-pointer ${
+                      groupBillsVisible
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                        : 'bg-surface-raised text-text-muted border-border hover:text-text'
+                    }`}
+                    title="Toggle whether roommate cards and bills are visible to the group or kept private"
+                  >
+                    {groupBillsVisible ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span className="whitespace-nowrap">Bills Visible to Group</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                        <span className="whitespace-nowrap">Cards & Bills Private</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                      </>
+                    )}
+                  </button>
+
+                  {/* View Mode Switcher (Table / Cards) */}
+                  <div className="flex items-center rounded-lg bg-surface-raised border border-border p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('table')}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                        viewMode === 'table' ? 'bg-surface text-text shadow-2xs' : 'text-text-muted hover:text-text'
+                      }`}
+                      title="Referenced bill table design"
+                    >
+                      <List className="w-3.5 h-3.5" />
+                      Table
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('cards')}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                        viewMode === 'cards' ? 'bg-surface text-text shadow-2xs' : 'text-text-muted hover:text-text'
+                      }`}
+                      title="Cards view"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      Cards
+                    </button>
+                  </div>
+
+                  {/* Add Bill Button */}
+                  {isHost && group.status === 'active' && !group.isFrozen && (
+                    <Button
+                      size="xs"
+                      variant="primary"
+                      onClick={() => setIsExpenseModalOpen(true)}
+                      iconLeft={<Plus className="w-3.5 h-3.5" />}
+                    >
+                      Add Bill
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Roommate Tabs (Figma style) */}
+              <div className="people-tabs" role="tablist">
                 <button
+                  role="tab"
+                  className={selectedPersonTab === 'all' ? 'active' : ''}
                   onClick={() => setSelectedPersonTab('all')}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors flex items-center gap-1.5 ${
-                    selectedPersonTab === 'all'
-                      ? 'bg-primary text-slate-950 shadow-sm'
-                      : 'bg-surface-raised text-text-muted hover:text-text border border-border'
-                  }`}
                 >
-                  All members
-                  <span className="text-[10px] opacity-80">({people.length})</span>
+                  All bills <span className="badge-count">{visibleBills.length}</span>
                 </button>
-                {people.map((p) => {
-                  const status = getPersonStatus(p);
+                {people.map((person) => {
+                  const pStatus = getPersonStatus(person);
+                  const pBillCount = expenses.filter(
+                    (e) => e.paidByPersonId === person.id || e.splits?.some((s) => s.personId === person.id)
+                  ).length;
+                  const initials = person.name.slice(0, 2).toUpperCase();
+
                   return (
                     <button
-                      key={p.id}
-                      onClick={() => setSelectedPersonTab(String(p.id))}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                        selectedPersonTab === String(p.id)
-                          ? 'bg-primary text-slate-950 shadow-sm'
-                          : 'bg-surface-raised text-text-muted hover:text-text border border-border'
-                      }`}
+                      key={person.id}
+                      role="tab"
+                      className={selectedPersonTab === String(person.id) ? 'active' : ''}
+                      onClick={() => setSelectedPersonTab(String(person.id))}
                     >
-                      <span className="w-2 h-2 rounded-full" style={{ background: status.key === 'paid' ? '#059669' : status.key === 'half' ? '#d97706' : '#e11d48' }} />
-                      {p.name.split(' ')[0]}
+                      <span className="avatar-badge avatar-badge-sm bg-primary text-[10px]">
+                        {initials}
+                      </span>
+                      <span>{person.name.split(' ')[0]}</span>
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{
+                          background:
+                            pStatus.key === 'paid' ? '#059669' : pStatus.key === 'half' ? '#d97706' : '#e11d48',
+                        }}
+                      />
+                      <span className="badge-count">{pBillCount}</span>
                     </button>
                   );
                 })}
               </div>
 
-              {/* Search box */}
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search member..."
-                  className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border bg-surface text-text placeholder:text-text-muted focus:border-primary"
-                />
-              </div>
-            </div>
+              {/* Single Person Financial Summary Bar (When person tab selected) */}
+              {selectedPersonTab !== 'all' && (() => {
+                const sel = people.find((p) => p.id === Number(selectedPersonTab));
+                if (!sel) return null;
+                const selStatus = getPersonStatus(sel);
+                const selRemaining = Math.max(0, sel.remainingToPay || 0);
 
-            {/* Individual Roommate Cards */}
-            {filteredPeople.length === 0 ? (
-              <EmptyState
-                icon={<Users className="w-6 h-6 text-text-muted" />}
-                title="No members match"
-                description="Try clearing your search query or selecting 'All members'."
-                actionText="Reset Filter"
-                onAction={() => {
-                  setSelectedPersonTab('all');
-                  setSearchQuery('');
-                }}
-              />
-            ) : (
-              <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredPeople.map((person) => {
-                  const status = getPersonStatus(person);
-                  const totalShare = person.shareSplitsTotal || 0;
-                  const paid = person.acceptedSentPaymentsTotal || 0;
-                  const remaining = Math.max(0, person.remainingToPay || 0);
-                  const progress = totalShare > 0 ? Math.min(100, Math.round((paid / totalShare) * 100)) : 100;
-                  const initials = person.name.slice(0, 2).toUpperCase();
+                return (
+                  <div className="mx-4 sm:mx-6 my-4 p-4 rounded-xl bg-surface-raised border border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="avatar-badge bg-primary text-xs">
+                        {sel.name.slice(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-sm text-text">{sel.name}</h3>
+                          <span className={selStatus.className}>{selStatus.label}</span>
+                          {sel.isHost && <Badge variant="brand" size="xs">Host</Badge>}
+                        </div>
+                        <p className="text-xs text-text-muted mt-0.5">
+                          {sel.phone ? `Phone: ${sel.phone}` : 'Roommate'}
+                        </p>
+                      </div>
+                    </div>
 
-                  return (
-                    <m.div key={person.id} variants={listItem}>
-                      <Card className="p-5 flex flex-col justify-between space-y-4 hover:border-primary/40 transition-colors">
-                        {/* Header: Avatar, Name, Status Badge */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="avatar-badge bg-primary">
-                              {initials}
-                            </span>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <h3 className="font-bold text-base text-text truncate">
-                                  {person.name}
-                                </h3>
-                                {person.isHost && (
-                                  <Badge variant="brand" size="xs">
-                                    Host
-                                  </Badge>
+                    {/* Financial details: Total, Paid, Left */}
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="px-3 py-1.5 rounded-lg bg-surface border border-border">
+                        <span className="text-[10px] uppercase font-bold text-text-muted block">Total Bill</span>
+                        <strong className="text-xs sm:text-sm font-bold text-text font-mono">
+                          {formatINR(sel.shareSplitsTotal || 0)}
+                        </strong>
+                      </div>
+                      <div className="px-3 py-1.5 rounded-lg bg-surface border border-border">
+                        <span className="text-[10px] uppercase font-bold text-text-muted block">Amount Paid</span>
+                        <strong className="text-xs sm:text-sm font-bold text-primary font-mono">
+                          {formatINR(sel.acceptedSentPaymentsTotal || 0)}
+                        </strong>
+                      </div>
+                      <div className="px-3 py-1.5 rounded-lg bg-surface border border-border">
+                        <span className="text-[10px] uppercase font-bold text-text-muted block">Amount Left</span>
+                        <strong
+                          className={`text-xs sm:text-sm font-bold font-mono ${
+                            selRemaining > 0 ? 'text-amber-500' : 'text-primary'
+                          }`}
+                        >
+                          {formatINR(selRemaining)}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {/* Quick Actions */}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {group.status === 'active' && !group.isFrozen && (
+                        <Button
+                          size="xs"
+                          variant="primary"
+                          onClick={() => {
+                            setQuickPayPerson(sel);
+                            setQuickPayAmount(selRemaining > 0 ? paiseToRupees(selRemaining) : '');
+                          }}
+                          iconLeft={<Coins className="w-3.5 h-3.5 font-bold" />}
+                        >
+                          Record Payment
+                        </Button>
+                      )}
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        onClick={() => handleWhatsAppQuickShare(sel)}
+                        iconLeft={<MessageCircle className="w-3.5 h-3.5 text-emerald-500" />}
+                      >
+                        WhatsApp
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePersonVisibility(sel)}
+                        className={`p-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${
+                          sel.canViewAllBills !== false
+                            ? 'text-emerald-600 bg-emerald-500/10 border-emerald-500/30'
+                            : 'text-text-muted bg-surface border-border hover:text-text'
+                        }`}
+                        title={
+                          sel.canViewAllBills !== false
+                            ? 'Bill visible to group (Click to make private)'
+                            : 'Bill private (Click to make visible to group)'
+                        }
+                      >
+                        {sel.canViewAllBills !== false ? (
+                          <Eye className="w-4 h-4 text-emerald-500" />
+                        ) : (
+                          <EyeOff className="w-4 h-4 text-text-muted" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* VIEW 1: THE REFERENCED BILL DESIGN (Table/List from Figma) */}
+              {viewMode === 'table' ? (
+                <div className="table-wrap">
+                  {visibleBills.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <EmptyState
+                        icon={<Receipt className="w-8 h-8 text-text-muted" />}
+                        title="No bills found"
+                        description="Try selecting a different roommate or clearing your search filters."
+                        actionText="Clear Filters"
+                        onAction={() => {
+                          setSelectedPersonTab('all');
+                          setBillCategoryFilter('all');
+                          setSearchQuery('');
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <table className="w-full border-collapse min-w-[760px]">
+                      <thead>
+                        <tr className="border-b border-border bg-surface-raised/60">
+                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider pl-6">
+                            Description
+                          </th>
+                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                            Assigned / Paid By
+                          </th>
+                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                            Date
+                          </th>
+                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                            Amount
+                          </th>
+                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                            Visibility
+                          </th>
+                          <th className="h-10 px-4 text-right text-[10px] font-bold text-text-muted uppercase tracking-wider pr-6">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {visibleBills.map((bill) => {
+                          const cat =
+                            bill.splitType === 'exact'
+                              ? 'Rent'
+                              : bill.splitType === 'percentage'
+                              ? 'Utilities'
+                              : 'Groceries';
+                          const payer =
+                            bill.paidByPerson ||
+                            people.find((p) => p.id === bill.paidByPersonId) ||
+                            people[0];
+                          const billStatus = getBillStatus(bill);
+                          const initials = payer?.name?.slice(0, 2).toUpperCase() || 'HM';
+
+                          return (
+                            <tr key={bill.id} className="hover:bg-surface-raised/40 transition-colors">
+                              <td className="py-3 px-4 pl-6">
+                                <div className="flex items-center gap-3">
+                                  <span className={`bill-icon ${cat.toLowerCase()}`}>
+                                    {cat === 'Rent' ? (
+                                      <Home className="w-4 h-4" />
+                                    ) : cat === 'Utilities' ? (
+                                      <Zap className="w-4 h-4" />
+                                    ) : (
+                                      <Receipt className="w-4 h-4" />
+                                    )}
+                                  </span>
+                                  <div>
+                                    <strong className="text-xs sm:text-sm font-bold text-text block">
+                                      {bill.title}
+                                    </strong>
+                                    <span className="text-[11px] text-text-muted flex items-center gap-1.5 mt-0.5">
+                                      <span className="capitalize">{cat}</span>
+                                      <span>•</span>
+                                      <span>{bill.splitType} split</span>
+                                      {bill.splits && (
+                                        <span className="text-[10px] opacity-75">
+                                          ({bill.splits.length} shared)
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="avatar-badge avatar-badge-sm bg-primary text-[10px]">
+                                    {initials}
+                                  </span>
+                                  <span className="text-xs font-semibold text-text">
+                                    {payer?.name}
+                                  </span>
+                                </span>
+                              </td>
+
+                              <td className="py-3 px-4 text-xs font-medium text-text-muted">
+                                {bill.date ? formatDate(bill.date) : 'Recent'}
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <strong className="text-xs sm:text-sm font-extrabold text-text font-mono">
+                                  {formatINR(bill.totalAmount)}
+                                </strong>
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <span className={billStatus.className}>
+                                  {billStatus.label}
+                                </span>
+                              </td>
+
+                              <td className="py-3 px-4">
+                                {groupBillsVisible && payer?.canViewAllBills !== false ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                    <Eye className="w-3.5 h-3.5" />
+                                    Visible
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-text-muted">
+                                    <EyeOff className="w-3.5 h-3.5" />
+                                    Private
+                                  </span>
                                 )}
-                                {person.linkedUserId && (
-                                  <Badge variant="brand" size="xs" showIcon>
-                                    Claimed
-                                  </Badge>
-                                )}
+                              </td>
+
+                              <td className="py-3 px-4 pr-6 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {payer && payer.remainingToPay > 0 && group.status === 'active' && !group.isFrozen && (
+                                    <Button
+                                      size="xs"
+                                      variant="primary"
+                                      onClick={() => {
+                                        setQuickPayPerson(payer);
+                                        setQuickPayAmount(paiseToRupees(payer.remainingToPay));
+                                      }}
+                                      iconLeft={<Coins className="w-3 h-3" />}
+                                    >
+                                      Pay
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="xs"
+                                    variant="ghost"
+                                    onClick={() => setDetailPerson(payer)}
+                                    title="View bill details"
+                                  >
+                                    View
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ) : (
+                /* VIEW 2: CARDS VIEW (Optional alternative) */
+                <div className="p-4 sm:p-6">
+                  {filteredPeople.length === 0 ? (
+                    <EmptyState
+                      icon={<Users className="w-6 h-6 text-text-muted" />}
+                      title="No members match"
+                      description="Try clearing your search query or selecting 'All members'."
+                      actionText="Reset Filter"
+                      onAction={() => {
+                        setSelectedPersonTab('all');
+                        setSearchQuery('');
+                      }}
+                    />
+                  ) : (
+                    <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredPeople.map((person) => {
+                        const status = getPersonStatus(person);
+                        const totalShare = person.shareSplitsTotal || 0;
+                        const paid = person.acceptedSentPaymentsTotal || 0;
+                        const remaining = Math.max(0, person.remainingToPay || 0);
+                        const progress = totalShare > 0 ? Math.min(100, Math.round((paid / totalShare) * 100)) : 100;
+                        const initials = person.name.slice(0, 2).toUpperCase();
+
+                        return (
+                          <m.div key={person.id} variants={listItem}>
+                            <Card className="p-5 flex flex-col justify-between space-y-4 hover:border-primary/40 transition-colors">
+                              {/* Header: Avatar, Name, Status Badge */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <span className="avatar-badge bg-primary">
+                                    {initials}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <h3 className="font-bold text-base text-text truncate">
+                                        {person.name}
+                                      </h3>
+                                      {person.isHost && (
+                                        <Badge variant="brand" size="xs">
+                                          Host
+                                        </Badge>
+                                      )}
+                                      {person.linkedUserId && (
+                                        <Badge variant="brand" size="xs" showIcon>
+                                          Claimed
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {person.phone && (
+                                      <p className="text-[11px] text-text-muted font-mono">{person.phone}</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0 flex items-center gap-1.5">
+                                  <span className={status.className}>{status.label}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePersonVisibility(person)}
+                                    className="p-1 rounded text-text-muted hover:text-text cursor-pointer"
+                                    title={person.canViewAllBills !== false ? 'Bills visible to group' : 'Bills private'}
+                                  >
+                                    {person.canViewAllBills !== false ? (
+                                      <Eye className="w-3.5 h-3.5 text-emerald-500" />
+                                    ) : (
+                                      <EyeOff className="w-3.5 h-3.5 text-text-muted" />
+                                    )}
+                                  </button>
+                                </div>
                               </div>
-                              {person.phone && (
-                                <p className="text-[11px] text-text-muted font-mono">{person.phone}</p>
-                              )}
-                            </div>
-                          </div>
 
-                          {/* Status Badge (Paid, Half Paid, Pending) */}
-                          <div className="shrink-0">
-                            <span className={status.className}>{status.label}</span>
-                          </div>
-                        </div>
+                              {/* Financial Breakdown (Total, Paid, Left) */}
+                              <div className="grid grid-cols-3 gap-2 py-3 px-3.5 rounded-xl bg-surface-raised border border-border text-center">
+                                <div>
+                                  <span className="text-[10px] uppercase font-bold text-text-muted block tracking-wider">
+                                    Total Bill
+                                  </span>
+                                  <strong className="text-xs sm:text-sm font-extrabold text-text font-mono mt-0.5 block">
+                                    {formatINR(totalShare)}
+                                  </strong>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] uppercase font-bold text-text-muted block tracking-wider">
+                                    Amount Paid
+                                  </span>
+                                  <strong className="text-xs sm:text-sm font-extrabold text-primary font-mono mt-0.5 block">
+                                    {formatINR(paid)}
+                                  </strong>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] uppercase font-bold text-text-muted block tracking-wider">
+                                    Amount Left
+                                  </span>
+                                  <strong className={`text-xs sm:text-sm font-extrabold font-mono mt-0.5 block ${
+                                    remaining > 0 ? 'text-amber-500' : 'text-primary'
+                                  }`}>
+                                    {formatINR(remaining)}
+                                  </strong>
+                                </div>
+                              </div>
 
-                        {/* FULL FINANCIAL DETAILS (Requirement 3: Total, Paid, Left) */}
-                        <div className="grid grid-cols-3 gap-2 py-3 px-3.5 rounded-xl bg-surface-raised border border-border text-center">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-text-muted block tracking-wider">
-                              Total Bill
-                            </span>
-                            <strong className="text-xs sm:text-sm font-extrabold text-text font-mono mt-0.5 block">
-                              {formatINR(totalShare)}
-                            </strong>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-text-muted block tracking-wider">
-                              Amount Paid
-                            </span>
-                            <strong className="text-xs sm:text-sm font-extrabold text-primary font-mono mt-0.5 block">
-                              {formatINR(paid)}
-                            </strong>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-text-muted block tracking-wider">
-                              Amount Left
-                            </span>
-                            <strong className={`text-xs sm:text-sm font-extrabold font-mono mt-0.5 block ${
-                              remaining > 0 ? 'text-amber-500' : 'text-primary'
-                            }`}>
-                              {formatINR(remaining)}
-                            </strong>
-                          </div>
-                        </div>
+                              {/* Progress Bar */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-[11px] text-text-muted">
+                                  <span>Payment Progress</span>
+                                  <span className="font-mono font-bold text-text">{progress}%</span>
+                                </div>
+                                <div className="progress-bar-container mt-0">
+                                  <div
+                                    className={`progress-bar-fill ${progress < 100 && progress > 0 ? 'amber' : ''}`}
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </div>
+                              </div>
 
-                        {/* Visual Repayment Progress Bar */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[11px] text-text-muted">
-                            <span>Payment Progress</span>
-                            <span className="font-mono font-bold text-text">{progress}%</span>
-                          </div>
-                          <div className="progress-bar-container mt-0">
-                            <div
-                              className={`progress-bar-fill ${progress < 100 && progress > 0 ? 'amber' : ''}`}
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                        </div>
+                              {/* Actions Row */}
+                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-border flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {group.status === 'active' && !group.isFrozen && (
+                                    <Button
+                                      size="xs"
+                                      variant="primary"
+                                      onClick={() => {
+                                        setQuickPayPerson(person);
+                                        setQuickPayAmount(remaining > 0 ? paiseToRupees(remaining) : '');
+                                      }}
+                                      iconLeft={<Coins className="w-3.5 h-3.5 font-bold" />}
+                                    >
+                                      Record Payment
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="xs"
+                                    variant="secondary"
+                                    onClick={() => setDetailPerson(person)}
+                                  >
+                                    Full Bill
+                                  </Button>
+                                </div>
 
-                        {/* Actions Row (Requirement 3: Write amount paid & Requirement 4: Share options) */}
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-border flex-wrap">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {/* Write Amount Paid Button (Requirement 3) */}
-                            {group.status === 'active' && !group.isFrozen && (
-                              <Button
-                                size="xs"
-                                variant="primary"
-                                onClick={() => {
-                                  setQuickPayPerson(person);
-                                  setQuickPayAmount(remaining > 0 ? paiseToRupees(remaining) : '');
-                                }}
-                                iconLeft={<Coins className="w-3.5 h-3.5 font-bold" />}
-                              >
-                                Record Payment
-                              </Button>
-                            )}
-
-                            {/* View Full Bill Breakdown */}
-                            <Button
-                              size="xs"
-                              variant="secondary"
-                              onClick={() => setDetailPerson(person)}
-                            >
-                              Full Bill
-                            </Button>
-                          </div>
-
-                          {/* Share Options (Requirement 4) */}
-                          <div className="flex items-center gap-1.5 ml-auto">
-                            <Button
-                              size="xs"
-                              variant="secondary"
-                              onClick={() => handleWhatsAppQuickShare(person)}
-                              iconLeft={<MessageCircle className="w-3.5 h-3.5 text-emerald-500" />}
-                              title="Send statement via WhatsApp"
-                            >
-                              WhatsApp
-                            </Button>
-                            <PersonCopyDropdown
-                              group={group}
-                              person={person}
-                              isHost={isHost}
-                              onDeleted={fetchData}
-                            />
-                          </div>
-                        </div>
-                      </Card>
-                    </m.div>
-                  );
-                })}
-              </Stagger>
-            )}
+                                <div className="flex items-center gap-1.5 ml-auto">
+                                  <Button
+                                    size="xs"
+                                    variant="secondary"
+                                    onClick={() => handleWhatsAppQuickShare(person)}
+                                    iconLeft={<MessageCircle className="w-3.5 h-3.5 text-emerald-500" />}
+                                    title="Send statement via WhatsApp"
+                                  >
+                                    WhatsApp
+                                  </Button>
+                                  <PersonCopyDropdown
+                                    group={group}
+                                    person={person}
+                                    isHost={isHost}
+                                    onDeleted={fetchData}
+                                  />
+                                </div>
+                              </div>
+                            </Card>
+                          </m.div>
+                        );
+                      })}
+                    </Stagger>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
