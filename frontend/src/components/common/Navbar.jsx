@@ -17,6 +17,7 @@ import ThemeToggle from './ThemeToggle.jsx';
 import AnnouncementBanner from './AnnouncementBanner.jsx';
 import { m, AnimatePresence } from 'motion/react';
 import { springs } from '../../motion/tokens.js';
+import { isDemoModeActive, disableDemoMode } from '../../api/client.js';
 
 export default function Navbar({ onOpenNewGroup }) {
   const { user, logout } = useAuth();
@@ -83,6 +84,21 @@ export default function Navbar({ onOpenNewGroup }) {
 
           {/* Theme Toggle */}
           <ThemeToggle />
+
+          {isDemoModeActive() && (
+            <button
+              type="button"
+              onClick={() => {
+                disableDemoMode();
+                window.location.href = '/login';
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer"
+              title="Currently viewing offline mock data. Click to reconnect to your real database account."
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Demo Mode • Exit
+            </button>
+          )}
 
           {user ? (
             <>

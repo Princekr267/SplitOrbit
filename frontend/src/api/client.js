@@ -286,6 +286,9 @@ const INITIAL_DEMO_STATE = {
       title: 'Apartment Monthly Rent',
       totalAmount: 2400000,
       splitType: 'equal',
+      category: 'others',
+      paymentStatus: 'Paid',
+      status: 'Paid',
       date: '2026-11-01',
       paidByPerson: { id: 1, name: 'Vikram Sharma' },
       paidByPersonId: 1,
@@ -301,6 +304,9 @@ const INITIAL_DEMO_STATE = {
       title: 'Electricity & Power Bill',
       totalAmount: 480000,
       splitType: 'equal',
+      category: 'others',
+      paymentStatus: 'Half Paid',
+      status: 'Half Paid',
       date: '2026-11-04',
       paidByPerson: { id: 1, name: 'Vikram Sharma' },
       paidByPersonId: 1,
@@ -313,9 +319,12 @@ const INITIAL_DEMO_STATE = {
     },
     {
       id: 'exp-3',
-      title: 'High-speed Fiber Internet',
+      title: 'City Bus & Metro Passes',
       totalAmount: 220000,
       splitType: 'equal',
+      category: 'bus',
+      paymentStatus: 'Pending',
+      status: 'Pending',
       date: '2026-11-03',
       paidByPerson: { id: 1, name: 'Vikram Sharma' },
       paidByPersonId: 1,
@@ -328,9 +337,12 @@ const INITIAL_DEMO_STATE = {
     },
     {
       id: 'exp-4',
-      title: 'Weekly Shared Groceries',
+      title: 'Dinner & Groceries',
       totalAmount: 400000,
       splitType: 'equal',
+      category: 'food',
+      paymentStatus: 'Pending',
+      status: 'Pending',
       date: '2026-11-02',
       paidByPerson: { id: 1, name: 'Vikram Sharma' },
       paidByPersonId: 1,
@@ -506,6 +518,15 @@ function handleOfflineFallback(config) {
     return { success: true, data: { message: 'Group reopened successfully' } };
   }
 
+  // 10b. Delete Group (DELETE /groups/:groupId)
+  const groupDeleteMatch = cleanUrl.match(/^\/groups\/([^/]+)$/);
+  if (groupDeleteMatch && method === 'delete') {
+    const gId = groupDeleteMatch[1];
+    state.groups = state.groups.filter((g) => String(g.id) !== String(gId));
+    saveDemoState(state);
+    return { success: true, data: { message: 'Group deleted successfully' } };
+  }
+
   // 11. Group Detail (GET /groups/:groupId)
   const groupMatch = cleanUrl.match(/^\/groups\/([^/]+)$/);
   if (groupMatch && method === 'get') {
@@ -548,6 +569,10 @@ function handleOfflineFallback(config) {
       date: data.date || new Date().toISOString().split('T')[0],
       paidByPerson: payer,
       paidByPersonId: payer.id,
+      category: data.category || 'others',
+      paymentStatus: data.paymentStatus || data.status || 'Pending',
+      status: data.paymentStatus || data.status || 'Pending',
+      description: data.description || '',
       splits: data.splits || [],
     };
     state.expenses.unshift(newExp);
@@ -567,6 +592,25 @@ function handleOfflineFallback(config) {
 
     saveDemoState(state);
     return { success: true, data: newExp };
+  }
+
+  // 13b. Update Expense (Status / Category / Title)
+  const expUpdateMatch = cleanUrl.match(/\/expenses\/([^/]+)$/);
+  if (expUpdateMatch && (method === 'patch' || method === 'put')) {
+    const expId = expUpdateMatch[1];
+    const exp = state.expenses.find((e) => String(e.id) === String(expId));
+    if (exp) {
+      if (data.title !== undefined) exp.title = data.title;
+      if (data.totalAmount !== undefined) exp.totalAmount = Number(data.totalAmount);
+      if (data.category !== undefined) exp.category = data.category;
+      if (data.paymentStatus !== undefined || data.status !== undefined) {
+        exp.paymentStatus = data.paymentStatus || data.status;
+        exp.status = exp.paymentStatus;
+      }
+      if (data.description !== undefined) exp.description = data.description;
+      saveDemoState(state);
+      return { success: true, data: exp };
+    }
   }
 
   // 14. Accept Payment
