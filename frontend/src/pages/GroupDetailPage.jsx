@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar.jsx';
 import Badge from '../components/common/Badge.jsx';
 import Button from '../components/common/Button.jsx';
@@ -50,6 +50,8 @@ import {
   Zap,
   List,
   LayoutGrid,
+  ChevronDown,
+  Trash2,
 } from 'lucide-react';
 import { m, AnimatePresence } from 'motion/react';
 import { springs } from '../motion/tokens.js';
@@ -57,20 +59,48 @@ import { Stagger } from '../motion/components.jsx';
 import { listItem } from '../motion/variants.js';
 
 const CATEGORY_COLORS = {
+  cab: '#f59e0b',
+  bus: '#06b6d4',
+  food: '#10b981',
+  movie: '#8b5cf6',
+  others: '#64748b',
   Rent: '#08b98d',
   Utilities: '#2f6fbd',
-  Food: '#f59e0b',
-  Groceries: '#f59e0b',
-  Internet: '#8b5cf6',
-  Travel: '#06b6d4',
-  Services: '#ec4899',
-  Other: '#94a3b8',
+  Food: '#10b981',
+  Groceries: '#10b981',
+  Other: '#64748b',
+};
+
+const getBillCategory = (bill) => {
+  if (bill.category) return bill.category.toLowerCase();
+  if (bill.description) {
+    const match = bill.description.match(/\[cat:([^\]]+)\]/);
+    if (match) return match[1].toLowerCase();
+  }
+  return 'others';
+};
+
+const getCategoryDetails = (catKey) => {
+  const norm = (catKey || '').toLowerCase();
+  switch (norm) {
+    case 'cab':
+      return { label: 'Cab', icon: '🚕', color: '#f59e0b', badgeClass: 'bg-amber-500/10 text-amber-500 border-amber-500/20' };
+    case 'bus':
+      return { label: 'Bus', icon: '🚌', color: '#06b6d4', badgeClass: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20' };
+    case 'food':
+      return { label: 'Food', icon: '🍔', color: '#10b981', badgeClass: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
+    case 'movie':
+      return { label: 'Movie', icon: '🎬', color: '#8b5cf6', badgeClass: 'bg-purple-500/10 text-purple-500 border-purple-500/20' };
+    default:
+      return { label: 'Others', icon: '📦', color: '#64748b', badgeClass: 'bg-slate-500/10 text-slate-400 border-slate-500/20' };
+  }
 };
 
 export default function GroupDetailPage() {
   const { groupId } = useParams();
   const { user } = useAuth();
   const { addToast } = useToast();
+  const navigate = useNavigate();
 
   const [group, setGroup] = useState(null);
   const [people, setPeople] = useState([]);
@@ -120,6 +150,10 @@ export default function GroupDetailPage() {
   // Settle confirmation dialog states
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
   const [settling, setSettling] = useState(false);
+
+  // Delete Space dialog states (Requirement 1: Host and Admin can delete)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState(false);
 
   // Detail Person Drawer / Modal
   const [detailPerson, setDetailPerson] = useState(null);
@@ -185,6 +219,20 @@ export default function GroupDetailPage() {
       fetchData();
     } catch (err) {
       addToast(err.message || 'Failed to reopen group', 'error');
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    try {
+      setDeletingGroup(true);
+      await api.delete(`/groups/${groupId}`);
+      addToast(`"${group?.name || 'Space'}" deleted successfully`, 'success');
+      setDeleteDialogOpen(false);
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      addToast(err.message || 'Failed to delete space', 'error');
+    } finally {
+      setDeletingGroup(false);
     }
   };
 
@@ -318,17 +366,107 @@ ${window.location.origin}/dashboard`);
 
   // Helper for computing Bill Status
   const getBillStatus = (bill) => {
+    let explicitStatus = bill.paymentStatus || bill.status;
+    if (!explicitStatus && bill.description) {
+      const match = bill.description.match(/\[status:([^\]]+)\]/);
+      if (match) explicitStatus = match[1];
+    }
+    if (explicitStatus) {
+      const norm = explicitStatus.toLowerCase();
+      if (norm.includes('half')) {
+        return { label: 'Half Paid', key: 'half', className: 'status half' };
+      }
+      if (norm.includes('paid')) {
+        return { label: 'Paid', key: 'paid', className: 'status paid' };
+      }
+      return { label: 'Pending', key: 'pending', className: 'status pending' };
+    }
+
     const payer = people.find((p) => p.id === bill.paidByPersonId);
     if (!payer || (summary && summary.totalSpent > 0 && summary.totalReceived >= summary.totalSpent)) {
-      return { label: 'Paid', className: 'status paid' };
+      return { label: 'Paid', key: 'paid', className: 'status paid' };
     }
     if (payer.remainingToPay <= 0) {
-      return { label: 'Paid', className: 'status paid' };
+      return { label: 'Paid', key: 'paid', className: 'status paid' };
     }
     if (payer.acceptedSentPaymentsTotal > 0 && payer.remainingToPay > 0) {
-      return { label: 'Half Paid', className: 'status half' };
+      return { label: 'Half Paid', key: 'half', className: 'status half' };
     }
-    return { label: 'Pending', className: 'status pending' };
+    return { label: 'Pending', key: 'pending', className: 'status pending' };
+  };
+
+  // Status Change Handler (Requirement 2: Make bill payment status changeable)
+  const handleUpdateBillStatus = async (bill, newStatus) => {
+    try {
+      setExpenses((prev) =>
+        prev.map((e) =>
+          e.id === bill.id
+            ? { ...e, paymentStatus: newStatus, status: newStatus }
+            : e
+        )
+      );
+
+      let updatedDesc = bill.description || '';
+      updatedDesc = updatedDesc.replace(/\[status:[^\]]+\]/g, '').trim();
+      updatedDesc = `${updatedDesc} [status:${newStatus}]`.trim();
+
+      const res = await api.patch(`/groups/${groupId}/expenses/${bill.id}`, {
+        paymentStatus: newStatus,
+        status: newStatus,
+        description: updatedDesc,
+      });
+
+      addToast(`Bill marked as ${newStatus}! 📝`, 'success');
+      if (res?.data) {
+        setExpenses((prev) =>
+          prev.map((e) =>
+            e.id === bill.id
+              ? { ...e, ...res.data, paymentStatus: newStatus, status: newStatus }
+              : e
+          )
+        );
+      }
+    } catch (err) {
+      addToast(err.message || 'Failed to update bill payment status', 'error');
+      fetchData();
+    }
+  };
+
+  // Handle updating an individual person's bill share status (Pending, Half Paid, Paid)
+  const handleUpdateSplitStatus = async (row, newStatus) => {
+    const { bill, personId, person } = row;
+    try {
+      let updatedDesc = bill.description || '';
+      const regex = new RegExp(`\\[split_status:${personId}:[^\\]]+\\]`, 'g');
+      updatedDesc = updatedDesc.replace(regex, '').trim();
+      updatedDesc = `${updatedDesc} [split_status:${personId}:${newStatus}]`.trim();
+
+      setExpenses((prev) =>
+        prev.map((e) =>
+          e.id === bill.id
+            ? { ...e, description: updatedDesc }
+            : e
+        )
+      );
+
+      const res = await api.patch(`/groups/${groupId}/expenses/${bill.id}`, {
+        description: updatedDesc,
+      });
+
+      addToast(`${person?.name || 'Member'}'s share marked as ${newStatus}! 📝`, 'success');
+      if (res?.data) {
+        setExpenses((prev) =>
+          prev.map((e) =>
+            e.id === bill.id
+              ? { ...e, ...res.data, description: updatedDesc }
+              : e
+          )
+        );
+      }
+    } catch (err) {
+      addToast(err.message || 'Failed to update share status', 'error');
+      fetchData();
+    }
   };
 
   // Card & Bill Visible to Group Toggle Handlers
@@ -405,17 +543,22 @@ ${window.location.origin}/dashboard`);
   const categoryStats = useMemo(() => {
     const map = {};
     expenses.forEach((exp) => {
-      const cat = exp.splitType === 'exact' ? 'Rent' : exp.splitType === 'percentage' ? 'Utilities' : 'Groceries';
-      map[cat] = (map[cat] || 0) + (exp.totalAmount || 0);
+      const catKey = getBillCategory(exp);
+      const catInfo = getCategoryDetails(catKey);
+      map[catInfo.label] = (map[catInfo.label] || 0) + (exp.totalAmount || 0);
     });
 
     const total = summary?.totalSpent || 1;
-    const categories = Object.keys(map).map((cat) => ({
-      name: cat,
-      amount: map[cat],
-      percent: Math.round((map[cat] / total) * 100),
-      color: CATEGORY_COLORS[cat] || CATEGORY_COLORS.Other,
-    }));
+    const categories = Object.keys(map).map((catName) => {
+      const catKey = catName.toLowerCase();
+      const color = CATEGORY_COLORS[catKey] || CATEGORY_COLORS[catName] || '#64748b';
+      return {
+        name: catName,
+        amount: map[catName],
+        percent: Math.round((map[catName] / total) * 100),
+        color,
+      };
+    });
 
     if (categories.length === 0) {
       categories.push({ name: 'General', amount: summary?.totalSpent || 0, percent: 100, color: '#08b98d' });
@@ -518,33 +661,123 @@ ${window.location.origin}/dashboard`);
     });
   }, [people, selectedPersonTab, searchQuery]);
 
-  // Filtered Bills list for the Referenced Bill Design
-  const visibleBills = useMemo(() => {
-    return expenses.filter((exp) => {
+  // Expand expenses into individual per-person bill rows (Requirements 3 & 5)
+  const allIndividualRows = useMemo(() => {
+    const rows = [];
+
+    expenses.forEach((exp) => {
+      const catKey = getBillCategory(exp);
+      const catInfo = getCategoryDetails(catKey);
+      const payer =
+        exp.paidByPerson ||
+        people.find((p) => p.id === exp.paidByPersonId) ||
+        people[0];
+
+      const validSplits =
+        Array.isArray(exp.splits) && exp.splits.length > 0
+          ? exp.splits
+          : people.length > 0
+          ? people.map((p) => ({
+              personId: p.id,
+              amount: Math.round(exp.totalAmount / people.length),
+            }))
+          : [{ personId: exp.paidByPersonId, amount: exp.totalAmount }];
+
+      validSplits.forEach((split) => {
+        const participant =
+          split.person ||
+          people.find((p) => p.id === split.personId) ||
+          payer;
+
+        const totalShare = Number(split.amount || Math.round(exp.totalAmount / (validSplits.length || 1)));
+
+        let rowStatus = null;
+        if (exp.description) {
+          const match = exp.description.match(new RegExp(`\\[split_status:${participant?.id}:([^\\]]+)\\]`));
+          if (match) rowStatus = match[1];
+        }
+
+        if (!rowStatus) {
+          if (exp.paymentStatus) {
+            rowStatus = exp.paymentStatus;
+          } else if (participant?.id === exp.paidByPersonId) {
+            rowStatus = 'Paid';
+          } else if (participant && participant.remainingToPay <= 0) {
+            rowStatus = 'Paid';
+          } else if (participant && participant.acceptedSentPaymentsTotal > 0 && participant.remainingToPay > 0) {
+            rowStatus = 'Half Paid';
+          } else {
+            rowStatus = 'Pending';
+          }
+        }
+
+        let paidShare = 0;
+        let leftShare = totalShare;
+        const normStatus = (rowStatus || 'Pending').toLowerCase();
+
+        if (normStatus.includes('paid') && !normStatus.includes('half')) {
+          rowStatus = 'Paid';
+          paidShare = totalShare;
+          leftShare = 0;
+        } else if (normStatus.includes('half')) {
+          rowStatus = 'Half Paid';
+          paidShare = Math.round(totalShare / 2);
+          leftShare = totalShare - paidShare;
+        } else {
+          rowStatus = 'Pending';
+          paidShare = 0;
+          leftShare = totalShare;
+        }
+
+        rows.push({
+          rowId: `${exp.id}-${participant?.id || 'gen'}`,
+          expenseId: exp.id,
+          bill: exp,
+          title: exp.title,
+          category: catKey,
+          catInfo,
+          date: exp.date,
+          splitType: exp.splitType,
+          totalAmount: exp.totalAmount,
+          person: participant,
+          personId: participant?.id,
+          payer,
+          totalShare,
+          paidShare,
+          leftShare,
+          status: rowStatus,
+        });
+      });
+    });
+
+    return rows;
+  }, [expenses, people]);
+
+  // Filtered individual bill rows
+  const visibleBillRows = useMemo(() => {
+    return allIndividualRows.filter((row) => {
       // 1. Filter by person tab
-      const personIdNum = Number(selectedPersonTab);
       const matchesPerson =
-        selectedPersonTab === 'all' ||
-        exp.paidByPersonId === personIdNum ||
-        exp.splits?.some((s) => s.personId === personIdNum);
+        selectedPersonTab === 'all' || row.personId === Number(selectedPersonTab);
 
       // 2. Filter by category
-      const cat = exp.splitType === 'exact' ? 'Rent' : exp.splitType === 'percentage' ? 'Utilities' : 'Groceries';
       const matchesCategory =
-        billCategoryFilter === 'all' || cat.toLowerCase() === billCategoryFilter.toLowerCase();
+        billCategoryFilter === 'all' || row.category === billCategoryFilter.toLowerCase();
 
       // 3. Filter by search query
       const query = searchQuery.trim().toLowerCase();
-      const payer = exp.paidByPerson || people.find((p) => p.id === exp.paidByPersonId);
       const matchesSearch =
         !query ||
-        exp.title?.toLowerCase().includes(query) ||
-        cat.toLowerCase().includes(query) ||
-        payer?.name?.toLowerCase().includes(query);
+        row.title?.toLowerCase().includes(query) ||
+        row.category?.toLowerCase().includes(query) ||
+        row.person?.name?.toLowerCase().includes(query) ||
+        row.payer?.name?.toLowerCase().includes(query);
 
       return matchesPerson && matchesCategory && matchesSearch;
     });
-  }, [expenses, people, selectedPersonTab, billCategoryFilter, searchQuery]);
+  }, [allIndividualRows, selectedPersonTab, billCategoryFilter, searchQuery]);
+
+  const visibleBills = visibleBillRows;
 
   // Loading Skeleton
   if (loading) {
@@ -703,6 +936,16 @@ ${window.location.origin}/dashboard`);
                 iconLeft={<Unlock className="w-3.5 h-3.5" />}
               >
                 Reopen Space
+              </Button>
+            )}
+            {(isHost || user?.role === 'admin') && (
+              <Button
+                onClick={() => setDeleteDialogOpen(true)}
+                variant="danger"
+                size="sm"
+                iconLeft={<Trash2 className="w-3.5 h-3.5" />}
+              >
+                Delete Space
               </Button>
             )}
           </div>
@@ -936,8 +1179,8 @@ ${window.location.origin}/dashboard`);
         {/* MAIN NAVIGATION TABS */}
         <Tabs
           tabs={[
-            { id: 'people', label: 'Roommates & Bills', icon: Users, count: people.length },
-            { id: 'expenses', label: 'All Expenses', icon: Receipt, count: expenses.length },
+            { id: 'people', label: 'Bills', icon: Receipt, count: allIndividualRows.length },
+            { id: 'expenses', label: 'All Expenses', icon: List, count: expenses.length },
             {
               id: 'payments',
               label: 'Repayments',
@@ -958,9 +1201,9 @@ ${window.location.origin}/dashboard`);
               {/* Bills Header with Controls & Toggle Buttons */}
               <div className="bills-header">
                 <div>
-                  <h2 className="text-base sm:text-lg font-bold text-text">Household Bills</h2>
+                  <h2 className="text-base sm:text-lg font-bold text-text">Bills</h2>
                   <p className="text-xs text-text-muted mt-0.5">
-                    Track, manage, and settle shared expenses across roommates
+                    Individual bill shares, amounts paid, and pending balances
                   </p>
                 </div>
 
@@ -986,10 +1229,11 @@ ${window.location.origin}/dashboard`);
                       aria-label="Filter bill category"
                     >
                       <option value="all">All Categories</option>
-                      <option value="rent">Rent</option>
-                      <option value="utilities">Utilities</option>
-                      <option value="groceries">Groceries</option>
-                      <option value="services">Services</option>
+                      <option value="cab">🚕 Cab</option>
+                      <option value="bus">🚌 Bus</option>
+                      <option value="food">🍔 Food</option>
+                      <option value="movie">🎬 Movie</option>
+                      <option value="others">📦 Others</option>
                     </select>
                   </div>
 
@@ -1066,13 +1310,11 @@ ${window.location.origin}/dashboard`);
                   className={selectedPersonTab === 'all' ? 'active' : ''}
                   onClick={() => setSelectedPersonTab('all')}
                 >
-                  All bills <span className="badge-count">{visibleBills.length}</span>
+                  All bills <span className="badge-count">{allIndividualRows.length}</span>
                 </button>
                 {people.map((person) => {
                   const pStatus = getPersonStatus(person);
-                  const pBillCount = expenses.filter(
-                    (e) => e.paidByPersonId === person.id || e.splits?.some((s) => s.personId === person.id)
-                  ).length;
+                  const pBillCount = allIndividualRows.filter((r) => r.personId === person.id).length;
                   const initials = person.name.slice(0, 2).toUpperCase();
 
                   return (
@@ -1223,64 +1465,53 @@ ${window.location.origin}/dashboard`);
                             Description
                           </th>
                           <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
-                            Assigned / Paid By
+                            Assigned Person
                           </th>
                           <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
                             Date
                           </th>
                           <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
-                            Amount
+                            Total
+                          </th>
+                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                            Paid
+                          </th>
+                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                            Left
                           </th>
                           <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
                             Status
                           </th>
-                          <th className="h-10 px-4 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider">
-                            Visibility
-                          </th>
                           <th className="h-10 px-4 text-right text-[10px] font-bold text-text-muted uppercase tracking-wider pr-6">
-                            Actions
+                            Visibility
                           </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {visibleBills.map((bill) => {
-                          const cat =
-                            bill.splitType === 'exact'
-                              ? 'Rent'
-                              : bill.splitType === 'percentage'
-                              ? 'Utilities'
-                              : 'Groceries';
-                          const payer =
-                            bill.paidByPerson ||
-                            people.find((p) => p.id === bill.paidByPersonId) ||
-                            people[0];
-                          const billStatus = getBillStatus(bill);
-                          const initials = payer?.name?.slice(0, 2).toUpperCase() || 'HM';
+                        {visibleBillRows.map((row) => {
+                          const initials = row.person?.name?.slice(0, 2).toUpperCase() || 'RM';
+                          const statusKey = row.status === 'Paid' ? 'paid' : row.status === 'Half Paid' ? 'half' : 'pending';
 
                           return (
-                            <tr key={bill.id} className="hover:bg-surface-raised/40 transition-colors">
+                            <tr key={row.rowId} className="hover:bg-surface-raised/40 transition-colors">
                               <td className="py-3 px-4 pl-6">
                                 <div className="flex items-center gap-3">
-                                  <span className={`bill-icon ${cat.toLowerCase()}`}>
-                                    {cat === 'Rent' ? (
-                                      <Home className="w-4 h-4" />
-                                    ) : cat === 'Utilities' ? (
-                                      <Zap className="w-4 h-4" />
-                                    ) : (
-                                      <Receipt className="w-4 h-4" />
-                                    )}
+                                  <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base bg-surface-raised border border-border shrink-0 shadow-2xs">
+                                    {row.catInfo.icon}
                                   </span>
                                   <div>
                                     <strong className="text-xs sm:text-sm font-bold text-text block">
-                                      {bill.title}
+                                      {row.title}
                                     </strong>
                                     <span className="text-[11px] text-text-muted flex items-center gap-1.5 mt-0.5">
-                                      <span className="capitalize">{cat}</span>
+                                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold border ${row.catInfo.badgeClass}`}>
+                                        {row.catInfo.label}
+                                      </span>
                                       <span>•</span>
-                                      <span>{bill.splitType} split</span>
-                                      {bill.splits && (
+                                      <span className="capitalize">{row.splitType} split</span>
+                                      {row.bill.splits && (
                                         <span className="text-[10px] opacity-75">
-                                          ({bill.splits.length} shared)
+                                          ({row.bill.splits.length} shared)
                                         </span>
                                       )}
                                     </span>
@@ -1294,29 +1525,71 @@ ${window.location.origin}/dashboard`);
                                     {initials}
                                   </span>
                                   <span className="text-xs font-semibold text-text">
-                                    {payer?.name}
+                                    {row.person?.name}
+                                    {row.person?.isHost && (
+                                      <span className="ml-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                        (Host)
+                                      </span>
+                                    )}
                                   </span>
                                 </span>
                               </td>
 
                               <td className="py-3 px-4 text-xs font-medium text-text-muted">
-                                {bill.date ? formatDate(bill.date) : 'Recent'}
+                                {row.date ? formatDate(row.date) : 'Recent'}
                               </td>
 
+                              {/* Total Column */}
                               <td className="py-3 px-4">
-                                <strong className="text-xs sm:text-sm font-extrabold text-text font-mono">
-                                  {formatINR(bill.totalAmount)}
+                                <strong className="text-xs sm:text-sm font-bold text-text font-mono">
+                                  {formatINR(row.totalShare)}
                                 </strong>
                               </td>
 
+                              {/* Paid Column */}
                               <td className="py-3 px-4">
-                                <span className={billStatus.className}>
-                                  {billStatus.label}
-                                </span>
+                                <strong className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                                  {formatINR(row.paidShare)}
+                                </strong>
                               </td>
 
+                              {/* Left Column */}
                               <td className="py-3 px-4">
-                                {groupBillsVisible && payer?.canViewAllBills !== false ? (
+                                <strong
+                                  className={`text-xs sm:text-sm font-bold font-mono ${
+                                    row.leftShare > 0 ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'
+                                  }`}
+                                >
+                                  {formatINR(row.leftShare)}
+                                </strong>
+                              </td>
+
+                              {/* Status Dropdown Pill */}
+                              <td className="py-3 px-4">
+                                <div className="relative inline-block">
+                                  <select
+                                    value={row.status}
+                                    onChange={(e) => handleUpdateSplitStatus(row, e.target.value)}
+                                    className={`text-xs font-semibold py-1 px-2.5 rounded-full border cursor-pointer appearance-none pr-6 focus:outline-none transition-all shadow-2xs ${
+                                      statusKey === 'paid'
+                                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                        : statusKey === 'half'
+                                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                                        : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
+                                    }`}
+                                    title="Change payment status (Pending, Half Paid, Paid)"
+                                  >
+                                    <option value="Pending" className="bg-surface text-text">Pending</option>
+                                    <option value="Half Paid" className="bg-surface text-text">Half Paid</option>
+                                    <option value="Paid" className="bg-surface text-text">Paid</option>
+                                  </select>
+                                  <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                                </div>
+                              </td>
+
+                              {/* Visibility */}
+                              <td className="py-3 px-4 pr-6 text-right">
+                                {groupBillsVisible && row.person?.canViewAllBills !== false ? (
                                   <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                                     <Eye className="w-3.5 h-3.5" />
                                     Visible
@@ -1327,32 +1600,6 @@ ${window.location.origin}/dashboard`);
                                     Private
                                   </span>
                                 )}
-                              </td>
-
-                              <td className="py-3 px-4 pr-6 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  {payer && payer.remainingToPay > 0 && group.status === 'active' && !group.isFrozen && (
-                                    <Button
-                                      size="xs"
-                                      variant="primary"
-                                      onClick={() => {
-                                        setQuickPayPerson(payer);
-                                        setQuickPayAmount(paiseToRupees(payer.remainingToPay));
-                                      }}
-                                      iconLeft={<Coins className="w-3 h-3" />}
-                                    >
-                                      Pay
-                                    </Button>
-                                  )}
-                                  <Button
-                                    size="xs"
-                                    variant="ghost"
-                                    onClick={() => setDetailPerson(payer)}
-                                    title="View bill details"
-                                  >
-                                    View
-                                  </Button>
-                                </div>
                               </td>
                             </tr>
                           );
@@ -1977,6 +2224,18 @@ ${window.location.origin}/dashboard`);
         confirmText="Confirm & Settle"
         confirmVariant="success"
         loading={settling}
+      />
+
+      {/* Delete Space Confirmation Dialog (Requirement 1: Host & Admin can delete) */}
+      <ConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleDeleteGroup}
+        title={`Delete "${group?.name}"?`}
+        message="Are you sure you want to permanently delete this space? All bills, expenses, repayments, and roommate balances will be deleted. This action cannot be undone."
+        confirmText="Confirm & Delete"
+        confirmVariant="danger"
+        loading={deletingGroup}
       />
     </div>
   );

@@ -21,6 +21,14 @@ export async function createExpense(req, res, next) {
 
     await ensureGroupNotSettled(groupId);
 
+    let finalDesc = description || '';
+    if (req.body.category && !finalDesc.includes('[cat:')) {
+      finalDesc = `${finalDesc} [cat:${req.body.category}]`.trim();
+    }
+    if ((req.body.paymentStatus || req.body.status) && !finalDesc.includes('[status:')) {
+      finalDesc = `${finalDesc} [status:${req.body.paymentStatus || req.body.status}]`.trim();
+    }
+
     // Validate payer belongs to group and is not deleted
     const [payer] = await db
       .select({ id: people.id, name: people.name })
@@ -81,7 +89,7 @@ export async function createExpense(req, res, next) {
           totalAmount,
           date: date ? new Date(date) : new Date(),
           paidByPersonId,
-          description: description || '',
+          description: finalDesc,
           splitType,
           createdBy: req.user.id,
         })
@@ -147,10 +155,27 @@ export async function getExpenses(req, res, next) {
       },
     });
 
+    const enrich = (exp) => {
+      let cat = null;
+      let st = null;
+      if (exp.description) {
+        const catMatch = exp.description.match(/\[cat:([^\]]+)\]/);
+        if (catMatch) cat = catMatch[1];
+        const statusMatch = exp.description.match(/\[status:([^\]]+)\]/);
+        if (statusMatch) st = statusMatch[1];
+      }
+      return {
+        ...exp,
+        category: exp.category || cat || 'others',
+        paymentStatus: exp.paymentStatus || st || 'Pending',
+        status: exp.status || st || 'Pending',
+      };
+    };
+
     if (req.isHost || req.viewerPerson?.canViewAllBills) {
       return res.json({
         success: true,
-        data: expenseList,
+        data: expenseList.map(enrich),
       });
     }
 
@@ -171,7 +196,7 @@ export async function getExpenses(req, res, next) {
 
     res.json({
       success: true,
-      data: filteredList,
+      data: filteredList.map(enrich),
     });
   } catch (error) {
     next(error);
@@ -259,12 +284,23 @@ export async function updateExpense(req, res, next) {
     }
 
     const result = await db.transaction(async (tx) => {
+      let updatedDesc = description ?? existing.description;
+      if (req.body.category) {
+        updatedDesc = updatedDesc.replace(/\[cat:[^\]]+\]/g, '').trim();
+        updatedDesc = `${updatedDesc} [cat:${req.body.category}]`.trim();
+      }
+      if (req.body.paymentStatus || req.body.status) {
+        const st = req.body.paymentStatus || req.body.status;
+        updatedDesc = updatedDesc.replace(/\[status:[^\]]+\]/g, '').trim();
+        updatedDesc = `${updatedDesc} [status:${st}]`.trim();
+      }
+
       const updateFields = {
         title: title ?? existing.title,
         totalAmount: updatedTotal,
         date: date ? new Date(date) : existing.date,
         paidByPersonId: updatedPayerId,
-        description: description ?? existing.description,
+        description: updatedDesc,
         splitType: updatedSplitType,
       };
 

@@ -138,7 +138,9 @@ export default function AddExpenseModal({
         category,
         paymentStatus,
         status: paymentStatus,
-        description: description.trim() ? `${description.trim()} [cat:${category}]` : `[cat:${category}]`,
+        description: description.trim()
+          ? `${description.trim()} [cat:${category}] [status:${paymentStatus}]`
+          : `[cat:${category}] [status:${paymentStatus}]`,
         splitType,
         selectedPersonIds: splitType === 'equal' ? selectedPersonIds : [],
         splits: payloadSplits,
@@ -148,6 +150,8 @@ export default function AddExpenseModal({
       setTitle('');
       setAmountRupees('');
       setDescription('');
+      setCategory('food');
+      setPaymentStatus('Pending');
       onClose();
       if (onExpenseAdded) onExpenseAdded(res.data);
     } catch (err) {
@@ -241,6 +245,63 @@ export default function AddExpenseModal({
               onChange={(e) => setDate(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl bg-surface-raised border border-border text-text text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition"
             />
+          </div>
+        </div>
+
+        {/* Category Selector */}
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted mb-1.5">
+            Category *
+          </label>
+          <div className="grid grid-cols-5 gap-1.5 p-1 rounded-xl bg-surface-raised border border-border">
+            {[
+              { id: 'cab', label: 'Cab', icon: '🚕' },
+              { id: 'bus', label: 'Bus', icon: '🚌' },
+              { id: 'food', label: 'Food', icon: '🍔' },
+              { id: 'movie', label: 'Movie', icon: '🎬' },
+              { id: 'others', label: 'Others', icon: '📦' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setCategory(cat.id)}
+                className={`py-2 px-1 text-xs font-medium rounded-lg flex flex-col items-center gap-1 transition ${
+                  category === cat.id
+                    ? 'bg-brand-500 text-slate-950 font-bold shadow'
+                    : 'text-text-muted hover:text-text hover:bg-surface'
+                }`}
+              >
+                <span className="text-base">{cat.icon}</span>
+                <span className="capitalize text-[11px]">{cat.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Payment Status Selector */}
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted mb-1.5">
+            Initial Payment Status
+          </label>
+          <div className="grid grid-cols-3 gap-2 p-1 rounded-xl bg-surface-raised border border-border">
+            {[
+              { id: 'Pending', label: 'Pending', color: 'rose' },
+              { id: 'Half Paid', label: 'Half Paid', color: 'amber' },
+              { id: 'Paid', label: 'Paid', color: 'emerald' },
+            ].map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setPaymentStatus(st.id)}
+                className={`py-1.5 text-xs font-semibold rounded-lg transition ${
+                  paymentStatus === st.id
+                    ? 'bg-brand-500 text-slate-950 shadow'
+                    : 'text-text-muted hover:text-text hover:bg-surface'
+                }`}
+              >
+                {st.label}
+              </button>
+            ))}
           </div>
         </div>
 

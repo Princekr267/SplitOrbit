@@ -11,7 +11,7 @@ import { m, AnimatePresence } from 'motion/react';
 import { springs } from '../motion/tokens.js';
 
 import { isValidNextUrl } from '../utils/url.js';
-import { enableDemoMode } from '../api/client.js';
+import { enableDemoMode, disableDemoMode } from '../api/client.js';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -37,6 +37,9 @@ export default function LoginPage() {
     const cleanUsername = username.trim().toLowerCase();
     if (!cleanUsername || !password) return;
 
+    // Clear any previous demo mode flag so real credentials query the real backend
+    disableDemoMode();
+
     try {
       setLoading(true);
       const user = await login(cleanUsername, password);
@@ -49,6 +52,9 @@ export default function LoginPage() {
         setDisabledDetails({ reason });
         setErrorMessage('This account has been deactivated by an administrator.');
         addToast('This account has been deactivated.', 'error');
+      } else if (err.code === 'ECONNREFUSED' || err.message?.includes('refused') || err.message?.includes('Database offline')) {
+        setErrorMessage('Cannot reach database. Please ensure Docker Desktop is running.');
+        addToast('Database offline. Launch Docker Desktop to connect to your real account.', 'error');
       } else {
         setDisabledDetails(null);
         const msg = err.message || 'Invalid username or password';
